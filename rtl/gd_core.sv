@@ -1,0 +1,266 @@
+// Guardians core integration: direct MRA loader, SDRAM-backed graphics,
+// DDR3-backed program/sample/RAM, TMP68301, X1-010 and native raster.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+module gd_core
+(
+	input  logic        clk,
+	input  logic        cold_reset,
+	input  logic        reset,
+	input  logic        memory_ready,
+	input  logic        diagnostic_grid,
+	input  logic        service,
+	input  logic [15:0] dip_switches,
+	input  logic [31:0] joystick_p1,
+	input  logic [31:0] joystick_p2,
+
+	input  logic        rom_downloading,
+	input  logic        rom_wr,
+	input  logic [26:0] rom_addr,
+	input  logic  [7:0] rom_data,
+	output logic        rom_wait,
+
+	output logic        ddr_clk,
+	input  logic        ddr_busy,
+	output logic  [7:0] ddr_burstcount,
+	output logic [28:0] ddr_addr,
+	input  logic [63:0] ddr_dout,
+	input  logic        ddr_dout_ready,
+	output logic        ddr_rd,
+	output logic [63:0] ddr_din,
+	output logic  [7:0] ddr_be,
+	output logic        ddr_we,
+
+	output logic [24:0] sdram_mem_addr,
+	output logic [15:0] sdram_mem_din,
+	output logic  [1:0] sdram_mem_be,
+	output logic        sdram_mem_rnw,
+	output logic        sdram_mem_req,
+	input  logic [15:0] sdram_mem_dout,
+	input  logic        sdram_mem_ack,
+	output logic [24:0] sdram_dma_addr,
+	output logic        sdram_dma_req,
+	input  logic [63:0] sdram_dma_data,
+	input  logic        sdram_dma_ack,
+
+	output logic        ce_pix,
+	output logic        hblank,
+	output logic        hsync,
+	output logic        vblank,
+	output logic        vsync,
+	output logic  [7:0] red,
+	output logic  [7:0] green,
+	output logic  [7:0] blue,
+	output logic signed [15:0] audio_left,
+	output logic signed [15:0] audio_right,
+	output logic        rom_ready,
+	output logic [23:0] debug_cpu_address,
+	output logic [31:0] debug_bus_cycles,
+	output logic [15:0] debug_unmapped_cycles
+);
+
+logic [8:0] h_count;
+logic [8:0] v_count;
+logic frame_tick;
+gd_video_timing timing
+(
+	.clk, .reset(cold_reset), .ce_pix, .h_count, .v_count,
+	.hblank, .vblank, .hsync, .vsync, .frame_tick
+);
+
+logic ddr_load_wr;
+logic [25:0] ddr_load_addr;
+logic [7:0] ddr_load_data;
+logic ddr_load_wait;
+logic ddr_load_idle;
+logic layout_error;
+logic [26:0] accepted_bytes;
+logic [2:0] regions_seen;
+logic [24:0] loader_gfx_addr;
+logic [15:0] loader_gfx_din;
+logic [1:0] loader_gfx_be;
+logic loader_gfx_rnw;
+logic loader_gfx_req;
+logic loader_gfx_ack;
+
+gd_rom_loader loader
+(
+	.clk, .reset(cold_reset), .memory_ready, .downloading(rom_downloading),
+	.ioctl_wr(rom_wr), .ioctl_addr(rom_addr), .ioctl_data(rom_data),
+	.ioctl_wait(rom_wait), .ddr_load_wr, .ddr_load_addr, .ddr_load_data,
+	.ddr_load_wait, .ddr_load_idle, .gfx_addr(loader_gfx_addr),
+	.gfx_din(loader_gfx_din), .gfx_be(loader_gfx_be),
+	.gfx_rnw(loader_gfx_rnw), .gfx_req(loader_gfx_req),
+	.gfx_ack(loader_gfx_ack), .rom_ready,
+	.layout_error, .accepted_bytes, .regions_seen
+);
+
+logic [20:0] cpu_rom_addr;
+logic cpu_rom_req;
+logic [15:0] cpu_rom_dout;
+logic cpu_rom_ack;
+logic [19:0] sound_rom_addr;
+logic sound_rom_req;
+logic [7:0] sound_rom_dout;
+logic sound_rom_ack;
+logic [16:0] cpu_ram_addr;
+logic cpu_ram_req;
+logic cpu_ram_write;
+logic [15:0] cpu_ram_data;
+logic [1:0] cpu_ram_be;
+logic [15:0] cpu_ram_dout;
+logic cpu_ram_ack;
+gd_ddr_memory rom_memory
+(
+	.clk, .reset(cold_reset), .load_wr(ddr_load_wr),
+	.load_addr(ddr_load_addr), .load_data(ddr_load_data),
+	.load_wait(ddr_load_wait), .load_idle(ddr_load_idle),
+	.cpu_addr(cpu_rom_addr), .cpu_req(cpu_rom_req),
+	.cpu_dout(cpu_rom_dout), .cpu_ack(cpu_rom_ack),
+	.sound_addr(sound_rom_addr), .sound_req(sound_rom_req),
+	.sound_dout(sound_rom_dout), .sound_ack(sound_rom_ack),
+	.ram_addr(cpu_ram_addr), .ram_req(cpu_ram_req), .ram_write(cpu_ram_write),
+	.ram_data(cpu_ram_data), .ram_be(cpu_ram_be), .ram_dout(cpu_ram_dout),
+	.ram_ack(cpu_ram_ack),
+	.gfx_addr(25'd0), .gfx_req(1'b0),
+	.gfx_dout(), .gfx_ack(),
+	.ddr_clk, .ddr_busy, .ddr_burstcount, .ddr_addr, .ddr_dout,
+	.ddr_dout_ready, .ddr_rd, .ddr_din, .ddr_be, .ddr_we
+);
+
+wire runtime_reset = reset || !memory_ready || !rom_ready || rom_downloading;
+logic raster_irq;
+logic [15:0] video_control;
+logic [26:0] video_x_offset;
+logic [26:0] video_x_zoom;
+logic [26:0] video_y_offset;
+logic [26:0] video_y_zoom;
+logic        sprite_buffer_busy;
+logic [15:0] raster_enable;
+logic [15:0] raster_position;
+always_ff @(posedge clk) begin
+	raster_irq <= 1'b0;
+	if (!runtime_reset && ce_pix && (h_count == 9'd0)
+	    && raster_enable[0] && (v_count == raster_position[8:0]))
+		raster_irq <= 1'b1;
+end
+
+logic [16:0] sprite_video_address;
+logic [63:0] sprite_video_q;
+logic [14:0] palette_video_address;
+logic [15:0] palette_video_q;
+logic [4:0] video_reg_address;
+logic [15:0] video_reg_q;
+logic x1_write;
+logic [12:0] x1_address;
+logic [15:0] x1_data;
+logic [1:0] x1_byte_enable;
+logic [15:0] x1_q;
+logic [63:0] sample_banks;
+logic [31:0] debug_rom_cycles;
+logic cpu_running;
+
+assign video_reg_address = 5'd0;
+
+gd_cpu_subsystem cpu
+(
+	.clk, .reset(runtime_reset), .vblank, .raster_irq, .dip_switches,
+	.joystick_p1, .joystick_p2, .service,
+	.rom_addr(cpu_rom_addr), .rom_req(cpu_rom_req),
+	.rom_dout(cpu_rom_dout), .rom_ack(cpu_rom_ack),
+	.ram_addr(cpu_ram_addr), .ram_req(cpu_ram_req), .ram_write(cpu_ram_write),
+	.ram_data(cpu_ram_data), .ram_be(cpu_ram_be), .ram_dout(cpu_ram_dout),
+	.ram_ack(cpu_ram_ack),
+	.sprite_video_address, .sprite_video_q,
+	.palette_video_address, .palette_video_q,
+	.video_reg_address, .video_reg_q, .video_control,
+	.video_x_offset, .video_x_zoom, .video_y_offset, .video_y_zoom,
+	.sprite_buffer_busy,
+	.raster_enable, .raster_position,
+	.x1_write, .x1_address, .x1_data, .x1_byte_enable, .x1_q,
+	.sample_banks, .debug_address(debug_cpu_address),
+	.debug_bus_cycles, .debug_rom_cycles,
+	.debug_unmapped_cycles, .cpu_running
+);
+
+gd_x1_010 sound
+(
+	.clk, .reset(runtime_reset), .cpu_write(x1_write),
+	.cpu_address(x1_address), .cpu_data(x1_data),
+	.cpu_byte_enable(x1_byte_enable), .cpu_q(x1_q), .sample_banks,
+	.sample_addr(sound_rom_addr), .sample_req(sound_rom_req),
+	.sample_dout(sound_rom_dout), .sample_ack(sound_rom_ack),
+	.audio_left, .audio_right
+);
+
+logic [24:0] renderer_gfx_addr;
+logic renderer_gfx_req;
+logic [63:0] renderer_gfx_dout;
+logic renderer_gfx_ack;
+logic [7:0] renderer_red;
+logic [7:0] renderer_green;
+logic [7:0] renderer_blue;
+logic renderer_busy;
+logic renderer_line_done;
+logic [15:0] renderer_missed_lines;
+logic [15:0] unused_loader_dout;
+gd_gfx_arbiter gfx_arbiter
+(
+	.clk, .reset(cold_reset), .cache_flush(rom_downloading),
+	.loader_addr(loader_gfx_addr),
+	.loader_din(loader_gfx_din), .loader_be(loader_gfx_be),
+	.loader_rnw(loader_gfx_rnw), .loader_req(loader_gfx_req),
+	.loader_dout(unused_loader_dout), .loader_ack(loader_gfx_ack),
+	.renderer_addr(renderer_gfx_addr), .renderer_req(renderer_gfx_req),
+	.renderer_dout(renderer_gfx_dout), .renderer_ack(renderer_gfx_ack),
+	.mem_addr(sdram_mem_addr), .mem_din(sdram_mem_din),
+	.mem_be(sdram_mem_be), .mem_rnw(sdram_mem_rnw),
+	.mem_req(sdram_mem_req), .mem_dout(sdram_mem_dout),
+	.mem_ack(sdram_mem_ack),
+	.dma_addr(sdram_dma_addr), .dma_req(sdram_dma_req),
+	.dma_data(sdram_dma_data), .dma_ack(sdram_dma_ack)
+);
+
+gd_dx101_video #(.AHEAD_RENDER(1'b1)) video
+(
+	.clk, .reset(runtime_reset || sprite_buffer_busy),
+	.ce_pix, .h_count, .v_count,
+	.hblank, .vblank, .video_control,
+	.video_x_offset, .video_x_zoom, .video_y_offset, .video_y_zoom,
+	.sprite_address(sprite_video_address),
+	.sprite_q(sprite_video_q), .palette_address(palette_video_address),
+	.palette_q(palette_video_q), .gfx_addr(renderer_gfx_addr),
+	.gfx_req(renderer_gfx_req), .gfx_dout(renderer_gfx_dout),
+	.gfx_ack(renderer_gfx_ack), .red(renderer_red), .green(renderer_green),
+	.blue(renderer_blue), .busy(renderer_busy),
+	.line_done(renderer_line_done),
+	.missed_lines(renderer_missed_lines)
+);
+
+always_comb begin
+	red = renderer_red;
+	green = renderer_green;
+	blue = renderer_blue;
+	if (diagnostic_grid && !hblank && !vblank) begin
+		red = {h_count[7:3], 3'b000};
+		green = {v_count[7:3], 3'b000};
+		blue = cpu_running ? 8'h60 : 8'h20;
+		if ((h_count[4:0] == 5'd0) || (v_count[4:0] == 5'd0)) begin
+			red = 8'h50;
+			green = 8'h50;
+			blue = 8'h50;
+		end
+		if (v_count >= 9'd216) begin
+			// Loader telemetry, visible only while the diagnostic raster is
+			// active. This makes pre-ROM hardware stalls remotely observable:
+			// G7 SDRAM ready, G6 DDR busy, G5 DDR loader wait, G4 download,
+			// B7 ROM ready, B6 DDR loader idle, B5 CPU running.
+			red = layout_error ? 8'hff : {accepted_bytes[26:22], 3'b000};
+			green = {memory_ready, ddr_busy, ddr_load_wait,
+			         rom_downloading, 1'b0, regions_seen};
+			blue = {rom_ready, ddr_load_idle, cpu_running, 5'b00000};
+		end
+	end
+end
+
+endmodule
