@@ -61,8 +61,8 @@ The release was built with Quartus Prime Lite 17.0 for the Cyclone V
 quartus_sh --flow compile Guardians
 ```
 
-The final 1.0 build closes timing. The core clock has +3.429 ns setup slack and
-+0.252 ns hold slack; all reported timing domains have non-negative slack.
+The final 1.0 build closes timing. The core clock has +2.999 ns setup slack and
++0.243 ns hold slack; all reported timing domains have non-negative slack.
 
 ## Tests
 
@@ -91,4 +91,3 @@ tools are excluded.
 Core RTL is distributed under GPL-3.0-or-later. Bundled upstream components keep
 their original notices and terms. See [`CREDITS.md`](CREDITS.md) and
 [`LICENSE`](LICENSE).
-
