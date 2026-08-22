@@ -21,6 +21,22 @@ Highlights:
   including the Banpresto logo, firewall sequence, scrolling gameplay,
   controls, and audio.
 
+## Credits
+
+- Core RTL, MiSTer integration, tests, and documentation: OpenAI Codex
+- Hardware testing, direction, game validation, and release: kandowontu
+- Original game: Winkysoft, under license to Banpresto
+- Original P-FG01-1 board: its original engineers and hardware designers
+- fx68k 68000-compatible core: Jorge Cwik
+- MiSTer framework: Alexey Melnikov, Till Harbaum, Sorgelig, Ludvig Strigeus,
+  Kitrinx, Mike Simone, Grabulosaure, bellwood420, and the wider MiSTer-devel
+  community
+- MAME hardware-documentation references: Luca Elia, David Haywood, Manbow-J,
+  and Olivier Galibert
+
+The modeled devices are the Toshiba TMP68301, NEC DX-101 / Allumer X1-020,
+and Seta X1-010. Intel/Altera-generated PLL IP retains its generated notices.
+
 Install the RBF and MRA using the paths documented in the README. ROM files are
 not included. See `CREDITS.md` for project, framework, processor-core, MAME
 hardware-reference, original-game, and FPGA-IP attribution.
