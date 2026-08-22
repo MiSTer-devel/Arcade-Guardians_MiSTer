@@ -16,7 +16,6 @@ assign USER_OUT = '1;
 assign {UART_RTS, UART_TXD, UART_DTR} = 3'b000;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
-assign VGA_SL = 2'b00;
 assign VGA_F1 = 1'b0;
 assign VGA_SCALER = 1'b0;
 assign VGA_DISABLE = 1'b0;
@@ -39,6 +38,7 @@ localparam CONF_STR = {
 	"P1O[2],Diagnostic raster,Off,On;",
 	"P1O[3],Test / service mode,Off,On;",
 	"P1-;",
+	"O46,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"DIP;",
 	"-;",
 	"T[0],Reset;",
@@ -50,6 +50,7 @@ localparam CONF_STR = {
 };
 
 wire forced_scandoubler;
+wire [21:0] gamma_bus;
 wire [1:0] buttons;
 wire [127:0] status;
 wire ioctl_download;
@@ -60,13 +61,31 @@ wire [15:0] ioctl_index;
 wire ioctl_wait;
 wire [31:0] joystick_0;
 wire [31:0] joystick_1;
+wire [15:0] joystick_l_analog_0;
+wire [15:0] joystick_l_analog_1;
 
 hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
-	.clk_sys(clk_sys), .HPS_BUS(HPS_BUS), .EXT_BUS(), .gamma_bus(),
+	.clk_sys(clk_sys), .HPS_BUS(HPS_BUS), .EXT_BUS(), .gamma_bus,
 	.forced_scandoubler, .buttons, .status, .ioctl_download,
 	.ioctl_wr, .ioctl_addr, .ioctl_dout, .ioctl_index, .ioctl_wait,
-	.joystick_0, .joystick_1
+	.joystick_0, .joystick_1, .joystick_l_analog_0,
+	.joystick_l_analog_1
+);
+
+wire [31:0] joystick_p1;
+wire [31:0] joystick_p2;
+
+gd_analog_to_digital analog_p1
+(
+	.digital_in(joystick_0), .analog_xy(joystick_l_analog_0),
+	.joystick_out(joystick_p1)
+);
+
+gd_analog_to_digital analog_p2
+(
+	.digital_in(joystick_1), .analog_xy(joystick_l_analog_1),
+	.joystick_out(joystick_p2)
 );
 
 wire clk_sys;
@@ -139,7 +158,7 @@ gd_core core
 	.clk(clk_sys), .cold_reset, .reset,
 	.memory_ready(memory_ready_sys),
 	.diagnostic_grid(!rom_ready | status[2]), .service(status[3]),
-	.dip_switches, .joystick_p1(joystick_0), .joystick_p2(joystick_1),
+	.dip_switches, .joystick_p1, .joystick_p2,
 	.rom_downloading(ioctl_download && (ioctl_index == 16'd0)),
 	.rom_wr(ioctl_wr && (ioctl_index == 16'd0)),
 	.rom_addr(ioctl_addr), .rom_data(ioctl_dout), .rom_wait(ioctl_wait),
@@ -156,14 +175,26 @@ gd_core core
 	.debug_bus_cycles, .debug_unmapped_cycles
 );
 
+wire [2:0] video_fx = status[6:4];
+wire scandoubler = forced_scandoubler || (video_fx != 3'd0);
+wire [2:0] scanline_level = video_fx ? video_fx - 3'd1 : 3'd0;
+
 assign CLK_VIDEO = clk_sys;
-assign CE_PIXEL = ce_pix;
-assign VGA_DE = ~(hblank | vblank);
-assign VGA_HS = hsync;
-assign VGA_VS = vsync;
-assign VGA_R = red;
-assign VGA_G = green;
-assign VGA_B = blue;
+assign VGA_SL = scanline_level[1:0];
+
+// Guardians is a native 15-kHz arcade board. Keep that timing on analog RGB
+// by default, but honour MiSTer's forced_scandoubler setting for 31-kHz VGA
+// displays. The same framework mixer also gives HDMI and analog output a
+// single, well-tested sync/gamma path.
+video_mixer #(.LINE_LENGTH(304), .HALF_DEPTH(0), .GAMMA(1)) video_out
+(
+	.CLK_VIDEO(clk_sys), .CE_PIXEL, .ce_pix,
+	.scandoubler, .hq2x(video_fx == 3'd1), .gamma_bus,
+	.R(red), .G(green), .B(blue),
+	.HSync(hsync), .VSync(vsync), .HBlank(hblank), .VBlank(vblank),
+	.HDMI_FREEZE(1'b0), .freeze_sync(),
+	.VGA_R, .VGA_G, .VGA_B, .VGA_VS, .VGA_HS, .VGA_DE
+);
 assign AUDIO_L = core_audio_left;
 assign AUDIO_R = core_audio_right;
 assign LED_USER = rom_ready;

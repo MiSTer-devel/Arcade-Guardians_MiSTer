@@ -23,6 +23,10 @@ module gd_dx101_video
 	input  logic  [8:0] v_count,
 	input  logic        hblank,
 	input  logic        vblank,
+	input  logic        raster_active,
+	input  logic        rowscroll_override_valid,
+	input  logic [14:0] rowscroll_override_record,
+	input  logic [15:0] rowscroll_override_data,
 	input  logic [15:0] video_control,
 	input  logic [26:0] video_x_offset,
 	input  logic [26:0] video_x_zoom,
@@ -44,7 +48,8 @@ module gd_dx101_video
 	output logic  [7:0] blue,
 	output logic        busy,
 	output logic        line_done,
-	output logic [15:0] missed_lines
+	output logic [15:0] missed_lines,
+	output logic  [8:0] rowscroll_lookup_line
 );
 
 // Eight X-interleaved memories turn an eight-pixel draw into one write per
@@ -64,26 +69,105 @@ logic [7:0] line_read_address;
 logic [1:0] display_bank;
 logic [1:0] work_bank;
 logic [3:0] bank_valid;
-logic [7:0] bank_line [0:3];
+logic [8:0] bank_line [0:3];
 logic       scheduler_started;
 logic       schedule_pending;
-logic [7:0] next_render_line;
-logic [7:0] render_distance;
+logic [8:0] next_render_line;
+logic [8:0] render_distance;
 logic [3:0] display_match;
 logic       selected_bank_found;
 logic [1:0] selected_bank;
-logic [7:0] selected_age;
-logic [7:0] bank_age0;
-logic [7:0] bank_age1;
-logic [7:0] bank_age2;
-logic [7:0] bank_age3;
+logic [8:0] selected_age;
+logic [8:0] bank_age0;
+logic [8:0] bank_age1;
+logic [8:0] bank_age2;
+logic [8:0] bank_age3;
 logic       free_bank_found;
 logic [1:0] free_bank;
 logic [8:0] target_line;
 logic [8:0] clear_x;
 integer line_bank_index;
-wire [8:0] physical_next_line = (v_count == 9'd255)
+localparam integer H_TOTAL = 410;
+localparam integer V_TOTAL = 258;
+localparam integer V_HALF = V_TOTAL / 2;
+
+wire [8:0] physical_next_line = (v_count == V_TOTAL - 1)
 	? 9'd0 : (v_count + 9'd1);
+always_comb rowscroll_lookup_line = target_line;
+
+function automatic [8:0] line_forward_distance;
+	input [8:0] from_line;
+	input [8:0] to_line;
+	begin
+		if (to_line >= from_line)
+			line_forward_distance = to_line - from_line;
+		else
+			line_forward_distance = to_line + V_TOTAL - from_line;
+	end
+endfunction
+
+// Horizontal positions use a signed 10-bit coordinate ring. Objects that
+// cross +511 continue at -512; a linear range comparison drops precisely the
+// wrapped columns that appear at a screen edge.
+function automatic wrapped_span_contains;
+	input integer first_coordinate;
+	input integer span_length;
+	input integer coordinate;
+	integer first_normalized;
+	integer last_normalized;
+	integer coordinate_normalized;
+	begin
+		first_normalized = first_coordinate & 1023;
+		if (first_normalized & 512)
+			first_normalized = first_normalized - 1024;
+		last_normalized = (first_coordinate + span_length - 1) & 1023;
+		if (last_normalized & 512)
+			last_normalized = last_normalized - 1024;
+		coordinate_normalized = coordinate & 1023;
+		if (coordinate_normalized & 512)
+			coordinate_normalized = coordinate_normalized - 1024;
+		if (last_normalized >= first_normalized)
+			wrapped_span_contains = (coordinate_normalized >= first_normalized)
+				&& (coordinate_normalized <= last_normalized);
+		else
+			wrapped_span_contains = (coordinate_normalized <= last_normalized)
+				|| (coordinate_normalized >= first_normalized);
+	end
+endfunction
+
+// Vertical positions use a smaller 9-bit ring for both normal sprites and
+// floating tilemap windows. Guardians exposes this directly when it splits a
+// large picture or background across descriptors: 0x1f9 followed by 0x039 is
+// a continuous pair of 64-line chunks across the 0x200 boundary. Treating a
+// floating window's Y as 10-bit discards the wrapped first chunk, leaving the
+// top of gameplay backgrounds black.
+function automatic wrapped_vertical_y_contains;
+	input integer first_coordinate;
+	input integer span_length;
+	input integer coordinate;
+	integer first_normalized;
+	integer last_normalized;
+	integer coordinate_normalized;
+	begin
+		first_normalized = first_coordinate & 511;
+		if (first_normalized & 256)
+			first_normalized = first_normalized - 512;
+		last_normalized = (first_coordinate + span_length - 1) & 511;
+		if (last_normalized & 256)
+			last_normalized = last_normalized - 512;
+		coordinate_normalized = coordinate & 511;
+		if (coordinate_normalized & 256)
+			coordinate_normalized = coordinate_normalized - 512;
+		if (last_normalized >= first_normalized)
+			wrapped_vertical_y_contains =
+				(coordinate_normalized >= first_normalized)
+				&& (coordinate_normalized <= last_normalized);
+		else
+			wrapped_vertical_y_contains =
+				(coordinate_normalized <= last_normalized)
+				|| (coordinate_normalized >= first_normalized);
+	end
+endfunction
 
 // A DX-101 list can contain hundreds of one-tile descriptors even though
 // only a few intersect a given scanline. Scan the 64-bit records into a
@@ -95,15 +179,15 @@ logic [7:0] active_total;
 logic [7:0] active_index;
 
 always_comb begin
-	render_distance = next_render_line - v_count[7:0];
-	display_match[0] = bank_valid[0] && (bank_line[0] == v_count[7:0]);
-	display_match[1] = bank_valid[1] && (bank_line[1] == v_count[7:0]);
-	display_match[2] = bank_valid[2] && (bank_line[2] == v_count[7:0]);
-	display_match[3] = bank_valid[3] && (bank_line[3] == v_count[7:0]);
-	bank_age0 = v_count[7:0] - bank_line[0];
-	bank_age1 = v_count[7:0] - bank_line[1];
-	bank_age2 = v_count[7:0] - bank_line[2];
-	bank_age3 = v_count[7:0] - bank_line[3];
+	render_distance = line_forward_distance(v_count, next_render_line);
+	display_match[0] = bank_valid[0] && (bank_line[0] == v_count);
+	display_match[1] = bank_valid[1] && (bank_line[1] == v_count);
+	display_match[2] = bank_valid[2] && (bank_line[2] == v_count);
+	display_match[3] = bank_valid[3] && (bank_line[3] == v_count);
+	bank_age0 = line_forward_distance(bank_line[0], v_count);
+	bank_age1 = line_forward_distance(bank_line[1], v_count);
+	bank_age2 = line_forward_distance(bank_line[2], v_count);
+	bank_age3 = line_forward_distance(bank_line[3], v_count);
 	selected_bank_found = 1'b1;
 	selected_age = 8'd0;
 	if (display_match[0]) selected_bank = 2'd0;
@@ -116,27 +200,27 @@ always_comb begin
 		// bank; look-ahead rendering can then recover on a simpler row.
 		selected_bank_found = 1'b0;
 		selected_bank = display_bank;
-		selected_age = 8'hff;
-		if (bank_valid[0] && (bank_age0 != 8'd0)
-		    && (bank_age0 < 8'h80) && (bank_age0 < selected_age)) begin
+	selected_age = 9'h1ff;
+	if (bank_valid[0] && (bank_age0 != 8'd0)
+	    && (bank_age0 <= V_HALF) && (bank_age0 < selected_age)) begin
 			selected_bank_found = 1'b1;
 			selected_bank = 2'd0;
 			selected_age = bank_age0;
 		end
-		if (bank_valid[1] && (bank_age1 != 8'd0)
-		    && (bank_age1 < 8'h80) && (bank_age1 < selected_age)) begin
+	if (bank_valid[1] && (bank_age1 != 8'd0)
+	    && (bank_age1 <= V_HALF) && (bank_age1 < selected_age)) begin
 			selected_bank_found = 1'b1;
 			selected_bank = 2'd1;
 			selected_age = bank_age1;
 		end
-		if (bank_valid[2] && (bank_age2 != 8'd0)
-		    && (bank_age2 < 8'h80) && (bank_age2 < selected_age)) begin
+	if (bank_valid[2] && (bank_age2 != 8'd0)
+	    && (bank_age2 <= V_HALF) && (bank_age2 < selected_age)) begin
 			selected_bank_found = 1'b1;
 			selected_bank = 2'd2;
 			selected_age = bank_age2;
 		end
-		if (bank_valid[3] && (bank_age3 != 8'd0)
-		    && (bank_age3 < 8'h80) && (bank_age3 < selected_age)) begin
+	if (bank_valid[3] && (bank_age3 != 8'd0)
+	    && (bank_age3 <= V_HALF) && (bank_age3 < selected_age)) begin
 			selected_bank_found = 1'b1;
 			selected_bank = 2'd3;
 			selected_age = bank_age3;
@@ -178,7 +262,7 @@ function automatic [7:0] packed_line_address;
 endfunction
 
 always_comb begin
-	if (h_count >= 9'd510) prefetch_x = h_count - 9'd510;
+	if (h_count >= H_TOTAL - 2) prefetch_x = h_count - (H_TOTAL - 2);
 	else prefetch_x = h_count + 9'd2;
 	line_read_address = packed_line_address(display_bank, prefetch_x[8:3]);
 	if (prefetch_x < 9'd304) begin
@@ -336,28 +420,30 @@ function automatic sprite_intersects_line;
 		else
 			used_line = (physical_line + y_base) & 11'h7ff;
 		if (fh3[15]) begin
-			sy = fs1 & 16'h03ff;
+			sy = fs1 & 16'h01ff;
+			if (sy & 9'h100) sy = sy - 512;
 			if (fh0[14]) sy = sy - 16'h90;
-			sy = sy & 10'h3ff;
-			if (sy & 10'h200) sy = sy - 1024;
+			sy = sy & 9'h1ff;
+			if (sy & 9'h100) sy = sy - 512;
 			height = ((((fh0[12] ? fh2 : fs1) & 16'hfc00) >> 10) + 1);
-			first_line = (sy + (fh2 & 16'h03ff)) & 10'h3ff;
-			if (first_line & 10'h200) first_line = first_line - 1024;
+			first_line = (sy + (fh2 & 16'h01ff)) & 9'h1ff;
+			if (first_line & 9'h100) first_line = first_line - 512;
 			end_line = first_line + height * 16 - 1;
 			width = ((fh0[12] ? fh1 : fs0) & 16'hfc00) >> 10;
 			sprite_intersects_line = (width != 0)
-				&& (used_line >= first_line) && (used_line <= end_line);
+				&& wrapped_vertical_y_contains(first_line, height * 16,
+					used_line);
 		end
 		else begin
 			sy = fs1 & 16'h01ff;
 			if (sy & 9'h100) sy = sy - 512;
 			if (fh0[14]) sy = sy - 16'h90;
 			size_y = 1 << ((((fh0[12] ? fh2 : fs1) & 16'h0c00) >> 10));
-			first_line = (sy + (fh2 & 16'h03ff)) & 10'h3ff;
-			if (first_line & 10'h200) first_line = first_line - 1024;
+			first_line = (sy + (fh2 & 16'h01ff)) & 9'h1ff;
+			if (first_line & 9'h100) first_line = first_line - 512;
 			end_line = first_line + size_y * 8 - 1;
-			sprite_intersects_line = (used_line >= first_line)
-				&& (used_line <= end_line);
+			sprite_intersects_line = wrapped_vertical_y_contains(
+				first_line, size_y * 8, used_line);
 		end
 	end
 endfunction
@@ -365,10 +451,13 @@ endfunction
 wire scan_record_visible = sprite_intersects_line(
 	h0, h1, h2, h3, scan_record_q[15:0], scan_record_q[31:16],
 	target_line, video_y_offset, video_y_zoom);
+wire [15:0] scan_s2 = rowscroll_override_valid
+	&& (sprite_pointer[16:2] == rowscroll_override_record)
+	? rowscroll_override_data : scan_record_q[47:32];
 wire [127:0] scan_record_data = {
 	h0, h1, h2, h3,
 	scan_record_q[15:0], scan_record_q[31:16],
-	scan_record_q[47:32], scan_record_q[63:48]
+	scan_s2, scan_record_q[63:48]
 };
 
 // Keep the active list as a true synchronous one-write/one-read memory.
@@ -515,10 +604,10 @@ always_ff @(posedge clk) begin
 		bank_valid <= 4'd0;
 		for (line_bank_index = 0; line_bank_index < 4;
 		     line_bank_index = line_bank_index + 1)
-			bank_line[line_bank_index] <= 8'd0;
+			bank_line[line_bank_index] <= 9'd0;
 		scheduler_started <= 1'b0;
 		schedule_pending <= 1'b0;
-		next_render_line <= 8'd0;
+		next_render_line <= 9'd0;
 		target_line <= 9'd0;
 		clear_x <= 9'd0;
 		active_count <= 8'd0;
@@ -551,17 +640,20 @@ always_ff @(posedge clk) begin
 				if ((line_bank_index != display_bank)
 				    && (!selected_bank_found || (line_bank_index != selected_bank))
 				    && bank_valid[line_bank_index]
-				    && ((bank_line[line_bank_index] - v_count[7:0]) > 8'h80))
+				    && (line_forward_distance(bank_line[line_bank_index], v_count)
+				        > 9'd0)
+				    && (line_forward_distance(bank_line[line_bank_index], v_count)
+				        <= V_HALF))
 					bank_valid[line_bank_index] <= 1'b0;
 			end
 
 			schedule_pending <= 1'b1;
 			if (!scheduler_started) begin
 				scheduler_started <= 1'b1;
-				next_render_line <= v_count[7:0] + 8'd1;
+				next_render_line <= physical_next_line;
 			end
-			else if ((render_distance == 8'd0) || (render_distance > 8'h80))
-				next_render_line <= v_count[7:0] + 8'd1;
+			else if ((render_distance == 9'd0) || (render_distance > V_HALF))
+				next_render_line <= physical_next_line;
 		end
 
 		case (state)
@@ -571,14 +663,15 @@ always_ff @(posedge clk) begin
 				// current raster position instead of chasing stale row numbers.
 				// Experimental look-ahead is bounded to three completed rows.
 				if (scheduler_started && free_bank_found
-				    && ((AHEAD_RENDER
+				    && (((AHEAD_RENDER && !raster_active)
 				         && (render_distance >= 8'd1)
 				         && (render_distance <= 8'd3))
-				        || (!AHEAD_RENDER && schedule_pending))) begin
+				        || ((!AHEAD_RENDER || raster_active)
+				            && schedule_pending))) begin
 					work_bank <= free_bank;
 					bank_valid[free_bank] <= 1'b0;
-					target_line <= AHEAD_RENDER
-						? {1'b0, next_render_line}
+					target_line <= (AHEAD_RENDER && !raster_active)
+						? next_render_line
 						: physical_next_line;
 					clear_x <= 9'd0;
 					active_count <= 8'd0;
@@ -703,14 +796,15 @@ always_ff @(posedge clk) begin
 				else
 					calc_used_line = (target_line + calc_y_base) & 11'h7ff;
 				if (h3[15]) begin
-					calc_sy = s1 & 16'h03ff;
+					calc_sy = s1 & 16'h01ff;
+					if (calc_sy & 9'h100) calc_sy = calc_sy - 512;
 					if (h0[14]) calc_sy = calc_sy - 16'h90;
-					calc_sy = calc_sy & 10'h3ff;
-					if (calc_sy & 10'h200) calc_sy = calc_sy - 1024;
+					calc_sy = calc_sy & 9'h1ff;
+					if (calc_sy & 9'h100) calc_sy = calc_sy - 512;
 					calc_height = (((use_global_size ? h2 : s1)
 						& 16'hfc00) >> 10) + 1;
-					calc_firstline = (calc_sy + (h2 & 16'h03ff)) & 10'h3ff;
-					if (calc_firstline & 10'h200) calc_firstline = calc_firstline - 1024;
+					calc_firstline = (calc_sy + (h2 & 16'h01ff)) & 9'h1ff;
+					if (calc_firstline & 9'h100) calc_firstline = calc_firstline - 512;
 					calc_endline = calc_firstline + calc_height * 16 - 1;
 					calc_sx = s0 & 16'h03ff;
 					if (h0[14]) calc_sx = calc_sx - 16'h80;
@@ -718,8 +812,10 @@ always_ff @(posedge clk) begin
 					calc_dest_x = (calc_sx + (h1 & 16'h03ff)) & 10'h3ff;
 					calc_dest_x = (calc_dest_x & 10'h1ff)
 						- (calc_dest_x & 10'h200);
-					if ((calc_width == 0) || (calc_used_line < calc_firstline)
-					    || (calc_used_line > calc_endline)) state <= R_NEXT_SPRITE;
+					if ((calc_width == 0)
+					    || !wrapped_vertical_y_contains(calc_firstline,
+					        calc_height * 16, calc_used_line))
+						state <= R_NEXT_SPRITE;
 					else begin
 						calc_scroll_y = s3 & 16'h01ff;
 						if (h0[14]) calc_scroll_y = calc_scroll_y - 16'h90;
@@ -752,11 +848,11 @@ always_ff @(posedge clk) begin
 					if (h0[14]) calc_sy = calc_sy - 16'h90;
 					calc_size_y = 1 << (((use_global_size ? h2 : s1)
 						& 16'h0c00) >> 10);
-					calc_firstline = (calc_sy + (h2 & 16'h03ff)) & 10'h3ff;
-					if (calc_firstline & 10'h200) calc_firstline = calc_firstline - 1024;
+					calc_firstline = (calc_sy + (h2 & 16'h01ff)) & 9'h1ff;
+					if (calc_firstline & 9'h100) calc_firstline = calc_firstline - 512;
 					calc_endline = calc_firstline + calc_size_y * 8 - 1;
-					if ((calc_used_line >= calc_firstline)
-					    && (calc_used_line <= calc_endline)) begin
+					if (wrapped_vertical_y_contains(calc_firstline,
+					    calc_size_y * 8, calc_used_line)) begin
 						normal_x_exp <= ((use_global_size ? h1 : s0)
 							& 16'h0c00) >> 10;
 						normal_y_exp <= ((use_global_size ? h2 : s1)
@@ -766,7 +862,7 @@ always_ff @(posedge clk) begin
 						calc_sx = ((s0 + (h1 & 16'h03ff)) & 10'h1ff)
 							- ((s0 + (h1 & 16'h03ff)) & 10'h200);
 						if (h0[14]) calc_sx = calc_sx - 16'h80;
-						calc_line = calc_used_line - calc_firstline;
+						calc_line = (calc_used_line - calc_firstline) & 511;
 						calc_row = calc_line >> 3;
 						normal_row <= calc_row[3:0];
 						flip_x <= s2[4];
@@ -824,8 +920,9 @@ always_ff @(posedge clk) begin
 					calc_screen_x = calc_screen_x
 						- $signed({video_x_offset[26],
 						           video_x_offset[26:16]});
-				if ((calc_dest_x < (float_first_column - 8))
-				    || (calc_dest_x > float_last_column)
+				if (!wrapped_span_contains(float_first_column - 8,
+				        (float_last_column - float_first_column + 1) + 8,
+				        calc_dest_x)
 				    || (calc_screen_x < -7) || (calc_screen_x > 303)) begin
 					if (float_columns_remaining == 6'd1)
 						state <= R_NEXT_SPRITE;
@@ -926,8 +1023,9 @@ always_ff @(posedge clk) begin
 			R_DONE: begin
 				line_done <= 1'b1;
 				bank_valid[work_bank] <= 1'b1;
-				bank_line[work_bank] <= target_line[7:0];
-				next_render_line <= target_line[7:0] + 8'd1;
+				bank_line[work_bank] <= target_line;
+				next_render_line <= (target_line == V_TOTAL - 1)
+					? 9'd0 : target_line + 9'd1;
 				busy <= 1'b0;
 				state <= R_IDLE;
 			end

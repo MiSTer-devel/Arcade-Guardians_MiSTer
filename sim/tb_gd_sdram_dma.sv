@@ -77,7 +77,7 @@ initial begin
 		$fatal(1, "DMA timeout state=%0d", dut.state);
 	if (video_dma_data !== 64'h7788_5566_3344_1122)
 		$fatal(1, "DMA row=%h", video_dma_data);
-	$display("PASS gd_sdram captured one CAS-3 burst-of-4 graphics row in %0d clocks",
+	$display("PASS gd_sdram captured one registered CAS-3 burst-of-4 graphics row in %0d clocks",
 	         timeout);
 	$finish;
 end

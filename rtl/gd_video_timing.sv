@@ -1,5 +1,5 @@
-// Guardians native raster timing. The DX-101 renders into a 512x256 raster;
-// the P-FG01-1 board exposes 304x232 pixels.
+// Guardians native raster timing. The P-FG01-1 program configures the DX-101
+// for a 410x258 CRT raster and exposes 304x232 pixels.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 module gd_video_timing
@@ -16,27 +16,35 @@ module gd_video_timing
 	output logic       frame_tick
 );
 
-// MAME models this board as a 512x256 raster at exactly 60 Hz. The system PLL
-// runs at the PLL's nearest legal eightfold multiple (7.864583 MHz pixels,
-// 60.002 Hz). A fixed clock
-// enable avoids the alternating seven/eight-cycle cadence that can violate
-// assumptions in MiSTer's input video pipeline on non-integer HDMI scaling.
-logic [2:0] pixel_divider;
-assign ce_pix = (pixel_divider == 3'd0);
+// The game programs horizontal sync/display start/display end/total as
+// 002e/0059/0188/019a and the vertical equivalents as
+// 0003/0014/00fe/0102. The DX-101's 50 MHz clock is divided by eight for a
+// 6.25 MHz dot clock. MAME deliberately substitutes 512x256 at exactly 60 Hz;
+// use the programmed board timing here for correct native analog RGB:
+// approximately 15.244 kHz horizontal and 59.085 Hz vertical.
+//
+// clk_sys is 62.5 MHz, so a fixed divide-by-ten pixel enable also gives the
+// renderer 4100 clocks per line (essentially the same budget as v1.0's
+// synthetic 512*8 timing).
+logic [3:0] pixel_divider;
+assign ce_pix = (pixel_divider == 4'd0);
 
 always_ff @(posedge clk) begin
 	frame_tick <= 1'b0;
 	if (reset) begin
-		pixel_divider <= 3'd0;
+		pixel_divider <= 4'd0;
 		h_count <= 9'd0;
 		v_count <= 9'd0;
 	end
 	else begin
-		pixel_divider <= pixel_divider + 3'd1;
+		if (pixel_divider == 4'd9)
+			pixel_divider <= 4'd0;
+		else
+			pixel_divider <= pixel_divider + 4'd1;
 		if (ce_pix) begin
-			if (h_count == 9'd511) begin
+			if (h_count == 9'd409) begin
 				h_count <= 9'd0;
-				if (v_count == 9'd255) begin
+				if (v_count == 9'd257) begin
 					v_count <= 9'd0;
 					frame_tick <= 1'b1;
 				end
@@ -52,8 +60,10 @@ end
 always_comb begin
 	hblank = (h_count >= 9'd304);
 	vblank = (v_count >= 9'd232);
-	hsync  = !((h_count >= 9'd384) && (h_count < 9'd432));
-	vsync  = !((v_count >= 9'd240) && (v_count < 9'd244));
+	// Rebase the board's display-start counter to visible pixel zero. The
+	// programmed H sync occupies original counters 0..45 and V sync 0..2.
+	hsync  = !((h_count >= 9'd321) && (h_count < 9'd367));
+	vsync  = !((v_count >= 9'd238) && (v_count < 9'd241));
 end
 
 endmodule

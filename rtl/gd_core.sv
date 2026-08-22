@@ -138,12 +138,17 @@ logic [26:0] video_y_zoom;
 logic        sprite_buffer_busy;
 logic [15:0] raster_enable;
 logic [15:0] raster_position;
-always_ff @(posedge clk) begin
-	raster_irq <= 1'b0;
-	if (!runtime_reset && ce_pix && (h_count == 9'd0)
-	    && raster_enable[0] && (v_count == raster_position[8:0]))
-		raster_irq <= 1'b1;
-end
+logic        raster_rearm;
+logic        rowscroll_write;
+logic [16:0] rowscroll_write_address;
+logic [15:0] rowscroll_write_data;
+logic  [1:0] rowscroll_write_byte_enable;
+gd_raster_irq raster_timer
+(
+	.clk, .reset(runtime_reset), .ce_pix, .h_count, .v_count,
+	.enable(raster_enable[0]), .position(raster_position[8:0]),
+	.rearm(raster_rearm), .irq(raster_irq)
+);
 
 logic [16:0] sprite_video_address;
 logic [63:0] sprite_video_q;
@@ -176,7 +181,9 @@ gd_cpu_subsystem cpu
 	.video_reg_address, .video_reg_q, .video_control,
 	.video_x_offset, .video_x_zoom, .video_y_offset, .video_y_zoom,
 	.sprite_buffer_busy,
-	.raster_enable, .raster_position,
+	.raster_enable, .raster_position, .raster_rearm,
+	.rowscroll_write, .rowscroll_write_address, .rowscroll_write_data,
+	.rowscroll_write_byte_enable,
 	.x1_write, .x1_address, .x1_data, .x1_byte_enable, .x1_q,
 	.sample_banks, .debug_address(debug_cpu_address),
 	.debug_bus_cycles, .debug_rom_cycles,
@@ -203,7 +210,26 @@ logic [7:0] renderer_blue;
 logic renderer_busy;
 logic renderer_line_done;
 logic [15:0] renderer_missed_lines;
+logic [8:0] rowscroll_lookup_line;
+logic rowscroll_override_valid;
+logic [14:0] rowscroll_override_record;
+logic [15:0] rowscroll_override_data;
 logic [15:0] unused_loader_dout;
+
+gd_rowscroll_history rowscroll_history
+(
+	.clk, .reset(runtime_reset), .ce_pix, .h_count, .v_count,
+	.capture_enable(raster_enable[0]),
+	.raster_position(raster_position[8:0]),
+	.write(rowscroll_write), .write_address(rowscroll_write_address),
+	.write_data(rowscroll_write_data),
+	.write_byte_enable(rowscroll_write_byte_enable),
+	.lookup_line(rowscroll_lookup_line),
+	.lookup_valid(rowscroll_override_valid),
+	.lookup_record(rowscroll_override_record),
+	.lookup_data(rowscroll_override_data)
+);
+
 gd_gfx_arbiter gfx_arbiter
 (
 	.clk, .reset(cold_reset), .cache_flush(rom_downloading),
@@ -225,7 +251,9 @@ gd_dx101_video #(.AHEAD_RENDER(1'b1)) video
 (
 	.clk, .reset(runtime_reset || sprite_buffer_busy),
 	.ce_pix, .h_count, .v_count,
-	.hblank, .vblank, .video_control,
+	.hblank, .vblank, .raster_active(raster_enable[0]), .video_control,
+	.rowscroll_override_valid, .rowscroll_override_record,
+	.rowscroll_override_data,
 	.video_x_offset, .video_x_zoom, .video_y_offset, .video_y_zoom,
 	.sprite_address(sprite_video_address),
 	.sprite_q(sprite_video_q), .palette_address(palette_video_address),
@@ -234,7 +262,8 @@ gd_dx101_video #(.AHEAD_RENDER(1'b1)) video
 	.gfx_ack(renderer_gfx_ack), .red(renderer_red), .green(renderer_green),
 	.blue(renderer_blue), .busy(renderer_busy),
 	.line_done(renderer_line_done),
-	.missed_lines(renderer_missed_lines)
+	.missed_lines(renderer_missed_lines),
+	.rowscroll_lookup_line
 );
 
 always_comb begin

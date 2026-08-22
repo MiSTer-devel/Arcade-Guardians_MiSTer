@@ -9,6 +9,12 @@ $vvp = if ($env:VVP) {
 } else {
     (Get-Command vvp -ErrorAction Stop).Source
 }
+$output = Join-Path $PSScriptRoot 'analog_to_digital.out'
+& $iverilog -g2012 -s tb_gd_analog_to_digital -o $output rtl/gd_analog_to_digital.sv sim/tb_gd_analog_to_digital.sv
+if ($LASTEXITCODE -ne 0) { throw 'Analog input unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'Analog input unit test failed' }
+
 $output = Join-Path $PSScriptRoot 'ddr_memory.out'
 & $iverilog -g2012 -s tb_gd_ddr_memory -o $output rtl/gd_ddr_memory.sv sim/tb_gd_ddr_memory.sv
 if ($LASTEXITCODE -ne 0) { throw 'DDR memory unit-test compilation failed' }
@@ -20,6 +26,18 @@ $output = Join-Path $PSScriptRoot 'video_timing.out'
 if ($LASTEXITCODE -ne 0) { throw 'Video timing unit-test compilation failed' }
 & $vvp $output
 if ($LASTEXITCODE -ne 0) { throw 'Video timing unit test failed' }
+
+$output = Join-Path $PSScriptRoot 'raster_irq.out'
+& $iverilog -g2012 -s tb_gd_raster_irq -o $output rtl/gd_raster_irq.sv sim/tb_gd_raster_irq.sv
+if ($LASTEXITCODE -ne 0) { throw 'Raster IRQ unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'Raster IRQ unit test failed' }
+
+$output = Join-Path $PSScriptRoot 'rowscroll_history.out'
+& $iverilog -g2012 -s tb_gd_rowscroll_history -o $output rtl/gd_rowscroll_history.sv sim/tb_gd_rowscroll_history.sv
+if ($LASTEXITCODE -ne 0) { throw 'Rowscroll history unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'Rowscroll history unit test failed' }
 
 $output = Join-Path $PSScriptRoot 'gfx_arbiter.out'
 & $iverilog -g2012 -s tb_gd_gfx_arbiter -o $output rtl/gd_gfx_arbiter.sv sim/tb_gd_gfx_arbiter.sv

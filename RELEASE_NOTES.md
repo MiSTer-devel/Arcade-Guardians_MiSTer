@@ -1,17 +1,26 @@
-# Guardians MiSTer 1.0
+# Guardians MiSTer 1.1
 
-First public release of the native MiSTer FPGA core for Banpresto's
-*Guardians / Denjin Makai II*.
+Hardware-fidelity and stability update for the native MiSTer FPGA core for
+Winkysoft's *Guardians / Denjin Makai II*, licensed to Banpresto.
 
 Highlights:
 
-- Direct loading from an original `grdians.zip` through the included MRA
-- TMP68301-compatible CPU subsystem, DX-101 video, and X1-010 PCM audio
-- Player 1/2 controls, coin/start/service inputs, DIP switches, and test mode
-- Corrected atomic DX-101 display-list buffering and bounded descriptor handling
-- Timing-clean Quartus Prime Lite 17.0 build
-- Hardware-verified video, gameplay, input, and sound
+- Restored the intro firewall's per-line raster distortion by replaying the
+  game's completed DX-101 rowscroll writes and correctly re-arming held-line
+  raster interrupts.
+- Restored missing top background chunks with the DX-101's 9-bit vertical
+  coordinate ring for sprites and floating tilemap windows.
+- Replaced synthetic MAME raster dimensions with the game's programmed
+  410x258 timing while retaining MiSTer's HDMI, analog RGB, scandoubler, and
+  video-effect paths.
+- Added D-pad-priority left-analog-stick movement for both players.
+- Hardened SDRAM graphics capture with registered input data.
+- Passed the focused RTL regression suite and a clean Quartus Prime Lite 17.0
+  build with positive setup and hold slack.
+- Verified the final release RBF on a DE10-Nano through the included MRA,
+  including the Banpresto logo, firewall sequence, scrolling gameplay,
+  controls, and audio.
 
 Install the RBF and MRA using the paths documented in the README. ROM files are
-not included.
-
+not included. See `CREDITS.md` for project, framework, processor-core, MAME
+hardware-reference, original-game, and FPGA-IP attribution.

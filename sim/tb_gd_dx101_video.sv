@@ -7,6 +7,10 @@ logic [8:0] h_count=0;
 logic [8:0] v_count=0;
 logic hblank=0;
 logic vblank=0;
+logic raster_active=1;
+logic rowscroll_override_valid=0;
+logic [14:0] rowscroll_override_record=0;
+logic [15:0] rowscroll_override_data=0;
 logic [15:0] video_control=0;
 logic [26:0] video_x_offset=0;
 logic [26:0] video_x_zoom=27'h0010000;
@@ -26,8 +30,9 @@ logic [7:0] red,green,blue;
 logic busy;
 logic line_done;
 logic [15:0] missed_lines;
+logic [8:0] rowscroll_lookup_line;
 
-gd_dx101_video #(.AHEAD_RENDER(1'b0)) dut(.*);
+gd_dx101_video #(.AHEAD_RENDER(1'b1)) dut(.*);
 logic [15:0] sprite_memory [0:131071];
 logic gfx_req_d=0;
 
@@ -74,6 +79,58 @@ end
 integer i;
 initial begin
 	for(i=0;i<131072;i=i+1) sprite_memory[i]=0;
+	// A recorded raster scroll word replaces only the matching packed
+	// descriptor's word 2 before it enters the active scanline list.
+	force dut.sprite_pointer = 17'h00040;
+	force dut.scan_record_q = 64'h1234_5678_9abc_def0;
+	rowscroll_override_valid = 1'b1;
+	rowscroll_override_record = 15'h0010;
+	rowscroll_override_data = 16'h7bf2;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "matching rowscroll history did not override descriptor");
+	rowscroll_override_record = 15'h0011;
+	#1;
+	if (dut.scan_s2 !== 16'h5678)
+		$fatal(1, "rowscroll history changed a different descriptor");
+	rowscroll_override_valid = 1'b0;
+	release dut.sprite_pointer;
+	release dut.scan_record_q;
+	// The output prefetch and line scheduler must wrap at the native
+	// 410x258 raster, not the old synthetic 512x256 MAME geometry.
+	h_count=9'd408; v_count=9'd257; #1;
+	if (dut.prefetch_x !== 9'd0 || dut.physical_next_line !== 9'd0)
+		$fatal(1,"native raster wrap prefetch=%0d next=%0d",
+			dut.prefetch_x,dut.physical_next_line);
+	h_count=9'd409; #1;
+	if (dut.prefetch_x !== 9'd1)
+		$fatal(1,"native prefetch wrap second pixel=%0d",dut.prefetch_x);
+	if (!dut.wrapped_span_contains(508,16,-510)
+	    || dut.wrapped_span_contains(508,16,-490))
+		$fatal(1,"signed 10-bit wrapped span comparison failed");
+	// DX-101 vertical displacement wraps at 0x200. This is the multi-header
+	// boundary used by the intro pictures and floating backgrounds.
+	if (!dut.wrapped_vertical_y_contains(252,16,-252)
+	    || dut.wrapped_vertical_y_contains(252,16,-236)
+	    || !dut.wrapped_vertical_y_contains(-225,49,287))
+		$fatal(1,"signed 9-bit normal-sprite Y comparison failed");
+	// Header Y=0x1fa (-6 on the normal-sprite ring) plus local Y=8
+	// starts at line 2. A 10-bit interpretation instead places it at -510.
+	if (!dut.sprite_intersects_line(16'h8000,16'h0000,16'h01fa,
+	        16'h0100,16'h0000,16'h0008,9'd2,27'd0,27'd0)
+	    || dut.sprite_intersects_line(16'h8000,16'h0000,16'h01fa,
+	        16'h0100,16'h0000,16'h0008,9'd10,27'd0,27'd0))
+		$fatal(1,"normal-sprite header Y did not wrap at 0x200");
+	// The gameplay background uses 0x1f9 -> 0x039 for consecutive
+	// floating-tilemap chunks across the same vertical boundary.
+	if (!dut.sprite_intersects_line(16'h0400,16'h0000,16'h0080,
+	        16'h8100,16'h5000,16'h0df9,9'd0,
+	        27'h77f0000,27'h7ff0000)
+	    || dut.sprite_intersects_line(16'h0400,16'h0000,16'h0080,
+	        16'h8100,16'h5000,16'h0df9,9'd57,
+	        27'h77f0000,27'h7ff0000))
+		$fatal(1,"floating background Y did not wrap at 0x200");
+	h_count=0; v_count=0;
 	// One final list header pointing to one 8x8 normal sprite.
 	sprite_memory[17'h01800]=16'h8000;
 	sprite_memory[17'h01801]=16'h0000;

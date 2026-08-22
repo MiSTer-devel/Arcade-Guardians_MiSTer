@@ -55,7 +55,7 @@ localparam logic [2:0] CMD_NOP       = 3'b111;
 // one complete eight-byte row with a single command.
 localparam logic [12:0] MODE_REGISTER = 13'h232;
 
-// The production core runs this controller at 62.916666 MHz. The initialization
+// The production core runs this controller at 62.5 MHz. The initialization
 // delay exceeds 100 us and the refresh cadence is below the required 7.8 us.
 localparam logic [15:0] INIT_DELAY_CYCLES = 16'd24000;
 localparam logic [15:0] REFRESH_CYCLES    = 16'd400;
@@ -88,6 +88,12 @@ logic        latched_rnw;
 logic        latched_req;
 logic [15:0] dq_out;
 logic        dq_oe = 1'b0;
+// Keep one fixed capture register between the SDRAM pins and all controller
+// clients. This is the same structure used by established MiSTer SDRAM
+// controllers and lets Quartus place all sixteen bits in their input I/O
+// cells. Writing SDRAM_DQ directly into a variable burst slice can leave
+// three of the four row words captured in core logic instead.
+logic [15:0] dq_capture;
 
 // The core, loader, graphics arbiter and this controller all use clk_sys.
 // Keep the toggle payload direct; the previous two-stage synchronizer was a
@@ -104,7 +110,7 @@ wire [24:0] video_dma_addr_sdr = video_dma_addr;
 logic  [5:0] dma_issued;
 logic  [5:0] dma_captured;
 logic [24:0] dma_address;
-logic  [3:0] dma_valid_pipe;
+logic  [4:0] dma_valid_pipe;
 logic        dma_burst_active;
 
 assign SDRAM_DQ = dq_oe ? dq_out : 16'hzzzz;
@@ -158,6 +164,13 @@ always_ff @(posedge clk) begin
 end
 
 always_ff @(posedge clk) begin
+	if (reset)
+		dq_capture <= 16'd0;
+	else
+		dq_capture <= SDRAM_DQ;
+end
+
+always_ff @(posedge clk) begin
 	command    <= CMD_NOP;
 	SDRAM_DQML <= 1'b1;
 	SDRAM_DQMH <= 1'b1;
@@ -181,7 +194,7 @@ always_ff @(posedge clk) begin
 		dma_issued    <= 6'd0;
 		dma_captured  <= 6'd0;
 		dma_address   <= 25'd0;
-		dma_valid_pipe <= 4'd0;
+		dma_valid_pipe <= 5'd0;
 		dma_burst_active <= 1'b0;
 	end
 	else begin
@@ -275,7 +288,7 @@ always_ff @(posedge clk) begin
 				end
 				else if (video_dma_req_sdr != video_dma_ack) begin
 					dma_address <= video_dma_addr_sdr;
-					dma_valid_pipe <= 4'd0;
+					dma_valid_pipe <= 5'd0;
 					dma_burst_active <= 1'b0;
 
 					command <= CMD_ACTIVE;
@@ -314,7 +327,7 @@ always_ff @(posedge clk) begin
 						// CAS latency is three. Capture midway through the
 						// single data cycle, three clk rising edges after the
 						// SDRAM samples this command.
-						delay_count  <= 16'd3;
+						delay_count  <= 16'd4;
 						state        <= ST_READ_WAIT;
 					end
 					else begin
@@ -335,7 +348,7 @@ always_ff @(posedge clk) begin
 					delay_count <= delay_count - 16'd1;
 				end
 				else begin
-					mem_dout <= SDRAM_DQ;
+					mem_dout <= dq_capture;
 					mem_ack  <= latched_req;
 					state    <= ST_IDLE;
 				end
@@ -369,7 +382,7 @@ always_ff @(posedge clk) begin
 				else begin
 					dma_issued   <= 6'd0;
 					dma_captured <= 6'd0;
-					dma_valid_pipe <= 4'd0;
+					dma_valid_pipe <= 5'd0;
 					state <= ST_DMA_STREAM;
 				end
 			end
@@ -377,7 +390,7 @@ always_ff @(posedge clk) begin
 			ST_DMA_STREAM: begin
 				SDRAM_DQML <= 1'b0;
 				SDRAM_DQMH <= 1'b0;
-				dma_valid_pipe <= {dma_valid_pipe[2:0],
+				dma_valid_pipe <= {dma_valid_pipe[3:0],
 				                   (dma_issued == 6'd0)};
 
 				SDRAM_BA <= dma_address[24:23];
@@ -389,9 +402,9 @@ always_ff @(posedge clk) begin
 					dma_issued <= 6'd1;
 				end
 
-				if (dma_valid_pipe[3] || dma_burst_active) begin
+				if (dma_valid_pipe[4] || dma_burst_active) begin
 					video_dma_data[dma_captured[1:0] * 16 +: 16]
-						<= SDRAM_DQ;
+						<= dq_capture;
 					if (dma_captured == 6'd3) begin
 						dma_burst_active <= 1'b0;
 						delay_count <= 16'd3;

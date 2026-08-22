@@ -4,11 +4,11 @@
 
 - FPGA core RTL, integration, tests, and documentation: OpenAI Codex
 - Hardware testing, game validation, direction, and release: kandowontu
-- Original arcade game and P-FG01-1 hardware: Banpresto and the original
-  developers and hardware designers
+- Original arcade game: Winkysoft, under license to Banpresto
+- Original P-FG01-1 hardware: its original engineers and hardware designers
 
 This is an independent preservation project. It is not affiliated with or
-endorsed by Banpresto or any semiconductor vendor.
+endorsed by Winkysoft, Banpresto, or any semiconductor vendor.
 
 ## Processor core
 

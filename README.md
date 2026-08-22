@@ -1,6 +1,7 @@
 # Guardians / Denjin Makai II for MiSTer
 
-Version 1.0 is a native FPGA implementation of Banpresto's 1995 arcade game
+Version 1.1 is a native FPGA implementation of Winkysoft's 1995 arcade game,
+licensed to Banpresto,
 *Guardians / Denjin Makai II* for the MiSTer DE10-Nano platform.
 
 The core loads an original `grdians.zip` set directly through its MRA. It does
@@ -9,7 +10,7 @@ copyrighted game ROMs are included in this repository or its releases.
 
 ## Install
 
-1. Copy `Guardians_20260809.rbf` to `/media/fat/_Arcade/cores/`.
+1. Copy `Guardians_20260822.rbf` to `/media/fat/_Arcade/cores/`.
 2. Copy `Guardians (Denjin Makai II).mra` to `/media/fat/_Arcade/`.
 3. Put a legally obtained, unmodified `grdians.zip` in
    `/media/fat/games/mame/`.
@@ -33,7 +34,12 @@ The default mappings are:
 
 Player 1 and Player 2 controls are supported. The core OSD also exposes the
 game's DIP switches and a **Test / service mode** switch. The MRA's original
-Service Mode DIP remains available as well.
+Service Mode DIP remains available as well. Directional input accepts both the
+mapped D-pad and each player's left analog stick, with a signed dead zone.
+
+The **Scandoubler Fx** menu leaves the original 15-kHz analog RGB timing intact
+when set to **None**. MiSTer's `forced_scandoubler=1` setting and the menu's
+HQ2x/CRT choices produce 31-kHz output for computer CRTs and VGA displays.
 
 ## Implemented hardware
 
@@ -42,10 +48,16 @@ Service Mode DIP remains available as well.
 - Seta X1-010-compatible 16-voice PCM sound
 - Direct MRA assembly of the 2 MiB program, 32 MiB graphics, and 1 MiB sample
   regions
-- Original 304 x 232 raster at approximately 60 Hz
+- Board-programmed 410 x 258 raster with 304 x 232 visible pixels
+  (15.244 kHz horizontal, 59.085 Hz vertical)
 - MiSTer scaler, HDMI, analog video, audio, controller, DIP, reset, and OSD
   integration
 - Atomic DX-101 display-list buffering with bounded descriptor traversal
+- Raster-aware DX-101 background rendering with per-line packed-scroll replay,
+  a 9-bit vertical coordinate ring for normal sprites and floating layers, and
+  10-bit horizontal wrapping
+- Held-line DX-101 raster-IRQ re-arming for the game's two-line rowscroll
+  effects on the native 410-pixel raster
 
 The memory design places the 32 MiB graphics bus in MiSTer's SDRAM and keeps
 program ROM, samples, and selected writable storage in DDR3. See
@@ -61,8 +73,9 @@ The release was built with Quartus Prime Lite 17.0 for the Cyclone V
 quartus_sh --flow compile Guardians
 ```
 
-The final 1.0 build closes timing. The core clock has +2.999 ns setup slack and
-+0.243 ns hold slack; all reported timing domains have non-negative slack.
+The current build closes timing. The core clock has +2.315 ns setup slack; the
+worst slack across every reported timing domain is +0.573 ns setup and
++0.196 ns hold.
 
 ## Tests
 
@@ -73,10 +86,15 @@ The focused RTL test suite uses Icarus Verilog 11 or newer:
 ```
 
 Set `IVERILOG` and `VVP` to full executable paths if they are not on `PATH`.
-The suite covers video timing, DDR access, SDRAM DMA, graphics arbitration,
-DX-101 rendering, sprite-list buffering, and TMP68301 behavior.
+The suite covers analog-stick conversion, video timing, DDR access, registered
+SDRAM DMA capture, graphics arbitration, DX-101 rendering, sprite-list
+buffering, native raster/prefetch wrap, 9-bit sprite and floating-layer Y
+wrapping, per-line rowscroll replay, circular object spans, raster look-ahead
+gating, and TMP68301 behavior.
+The raster tests also cover ordinary line matches, held-line re-entry, and
+rejection of re-arm writes for future lines.
 
-The 1.0 candidate was also verified on a DE10-Nano with the release MRA and an
+The 1.1 release was also verified on a DE10-Nano with the release MRA and an
 unmodified ROM set. Long-run validation covered two complete attract-mode
 gameplay sequences without the previous descriptor collapse, stripe corruption,
 or raster loss.

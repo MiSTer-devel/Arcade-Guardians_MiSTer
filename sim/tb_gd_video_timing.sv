@@ -28,11 +28,11 @@ module tb_gd_video_timing;
 		repeat (3) @(posedge clk);
 		reset <= 1'b0;
 
-		while (pixel_count < 512 * 256) begin
+		while (pixel_count < 410 * 258) begin
 			@(posedge clk);
 			clocks_since_pixel = clocks_since_pixel + 1;
 			if (ce_pix) begin
-				if (pixel_count != 0 && clocks_since_pixel != 8) begin
+				if (pixel_count != 0 && clocks_since_pixel != 10) begin
 					$display("FAIL pixel interval %0d", clocks_since_pixel);
 					$fatal(1);
 				end
@@ -47,7 +47,7 @@ module tb_gd_video_timing;
 				h_count, v_count, frame_tick);
 			$fatal(1);
 		end
-		$display("PASS gd_video_timing fixed divide-by-eight cadence");
+		$display("PASS gd_video_timing board-programmed 410x258 raster");
 		$finish;
 	end
 

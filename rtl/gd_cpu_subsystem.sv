@@ -39,6 +39,11 @@ module gd_cpu_subsystem
 	output logic        sprite_buffer_busy,
 	output logic [15:0] raster_enable,
 	output logic [15:0] raster_position,
+	output logic        raster_rearm,
+	output logic        rowscroll_write,
+	output logic [16:0] rowscroll_write_address,
+	output logic [15:0] rowscroll_write_data,
+	output logic  [1:0] rowscroll_write_byte_enable,
 
 	output logic        x1_write,
 	output logic [12:0] x1_address,
@@ -55,8 +60,8 @@ module gd_cpu_subsystem
 );
 
 // fx68k advances on alternating Phi1/Phi2 enables. 33.333 MHz phase
-// events produce the TMP68301's 16.667 MHz CPU clock from 62.916666 MHz.
-localparam logic [31:0] CPU_EVENT_INCREMENT = 32'd2275479386;
+// events produce the TMP68301's 16.667 MHz CPU clock from 62.5 MHz.
+localparam logic [31:0] CPU_EVENT_INCREMENT = 32'd2290649225;
 logic [31:0] cpu_clock_accumulator;
 logic [32:0] cpu_clock_sum;
 logic        cpu_half_phase;
@@ -165,6 +170,13 @@ bus_state_t bus_state;
 wire local_write = !cpu_as_n && !cpu_iack_cycle && cpu_data_strobe
 	&& cpu_data_strobe_seen && !cpu_rw && (bus_state == BUS_IDLE);
 
+always_comb begin
+	rowscroll_write = local_write && cs_sprite;
+	rowscroll_write_address = cpu_even_address[17:1];
+	rowscroll_write_data = cpu_data_out;
+	rowscroll_write_byte_enable = cpu_byte_enable;
+end
+
 wire [15:0] work_q;
 wire [15:0] work_video_unused;
 gd_word_ram #(.ADDR_WIDTH(15)) work_ram
@@ -191,6 +203,13 @@ wire sprite_buffer_trigger = local_write && cs_video_regs
 	&& (cpu_even_address[5:1] == 5'h13)
 	&& ((cpu_byte_enable[1] && (cpu_data_out[15:8] != 8'd0))
 	    || (cpu_byte_enable[0] && (cpu_data_out[7:0] != 8'd0)));
+// Writing one to register 0x3c re-arms the raster timer. Guardians relies on
+// the special case where register 0x3e still names the current line: the
+// still-active source queues a second service after the handler returns, then
+// that second service advances to line two and begins the rowscroll chain.
+always_comb raster_rearm = local_write && cs_video_regs
+	&& (cpu_even_address[5:1] == 5'h1e)
+	&& cpu_byte_enable[0] && cpu_data_out[0];
 gd_sprite_ram sprite_ram
 (
 	.clk(clk), .reset, .buffer_trigger(sprite_buffer_trigger),
