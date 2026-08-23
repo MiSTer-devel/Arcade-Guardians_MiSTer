@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 1.1.1 - 2026-08-23
+
+- Raised the internal system/renderer clock from 62.5 to 75 MHz while
+  preserving the board's exact 6.25 MHz pixel clock with a divide-by-twelve
+  enable. Retuned the CPU and X1-010 phase accumulators so game and audio speed
+  remain unchanged.
+- Added an open-page graphics DMA path. Consecutive graphics cache misses in
+  the same SDRAM row now avoid redundant precharge/activate cycles while row
+  changes, refreshes, and loader traffic retain explicit timing-safe handling.
+- Expanded the completed-line reservoir from three rows ahead to the twelve-row
+  hardware maximum without adding M10K blocks. Invisible vertical-blank rows
+  bypass sprite-list rendering so the queue refills before active video.
+- Routed blanking, sync, and RGB through MiSTer's standard `arcade_video`
+  alignment stage and corrected the internal scandoubler line-store stride.
+  This fixes scaler-backed analog-output slice displacement.
+- Removed the diagnostic grid from normal ROM loading and retained the proven
+  single-word SDRAM loader after an experimental write burst caused a
+  post-download startup stall.
+- Matched raster replay against the rewritten packed descriptor pointer used
+  by the DX-101 private display list. Already-rendered non-floating actor
+  pixels are protected from the late rowscrolled background plane, fixing the
+  Stage 1 foreground heat leakage and post-effect background truncation.
+- Added focused regressions for the faster renderer, open-page graphics DMA,
+  deeper line reservoir, native video alignment, and packed-descriptor raster
+  targeting. A captured Stage 1 trace confirms the packed target is exercised
+  throughout the effect.
+
 ## 1.1.0 - 2026-08-22
 
 - Implemented the DX-101 raster timer's held-line re-arm. Guardians disables

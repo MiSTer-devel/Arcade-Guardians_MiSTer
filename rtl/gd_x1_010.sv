@@ -44,8 +44,8 @@ always_comb begin
 		cpu_q[7:0] = channel_reg[cpu_address[6:0]];
 end
 
-// Preserve the original 32.552 kHz mixer cadence at the 62.5 MHz clock.
-localparam logic [31:0] SAMPLE_INCREMENT = 32'd2236962;
+// Preserve the original 32.552 kHz mixer cadence at the 68.75 MHz clock.
+localparam logic [31:0] SAMPLE_INCREMENT = 32'd2033602;
 logic [31:0] sample_accumulator;
 logic [32:0] sample_sum;
 wire sample_tick = sample_sum[32];

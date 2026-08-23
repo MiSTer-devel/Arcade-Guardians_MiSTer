@@ -23,9 +23,11 @@ module gd_video_timing
 // use the programmed board timing here for correct native analog RGB:
 // approximately 15.244 kHz horizontal and 59.085 Hz vertical.
 //
-// clk_sys is 62.5 MHz, so a fixed divide-by-ten pixel enable also gives the
-// renderer 4100 clocks per line (essentially the same budget as v1.0's
-// synthetic 512*8 timing).
+// clk_sys is 68.75 MHz, so a fixed divide-by-eleven pixel enable preserves the
+// board's exact 6.25 MHz dot clock while giving the renderer 4510 clocks per
+// line. The extra internal cycles prevent sustained rowscroll/sprite scenes
+// from exhausting the completed-line reservoir; external raster timing does
+// not change.
 logic [3:0] pixel_divider;
 assign ce_pix = (pixel_divider == 4'd0);
 
@@ -37,7 +39,7 @@ always_ff @(posedge clk) begin
 		v_count <= 9'd0;
 	end
 	else begin
-		if (pixel_divider == 4'd9)
+		if (pixel_divider == 4'd10)
 			pixel_divider <= 4'd0;
 		else
 			pixel_divider <= pixel_divider + 4'd1;

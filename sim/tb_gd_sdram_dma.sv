@@ -13,6 +13,8 @@ wire SDRAM_nCS, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS;
 logic [24:0] mem_addr = 25'd0;
 logic [15:0] mem_din = 16'd0;
 logic [1:0] mem_be = 2'b11;
+logic mem_burst = 1'b0;
+logic [63:0] mem_burst_data = 64'd0;
 logic mem_rnw = 1'b1;
 logic mem_req = 1'b0;
 logic [15:0] mem_dout;
@@ -23,37 +25,61 @@ logic video_dma_ack;
 logic [63:0] video_dma_data;
 logic ready;
 
-integer read_delay = -1;
-integer burst_word = 0;
+integer sdram_cycle = 0;
+integer read_start0 = -100;
+integer read_start1 = -100;
+integer read_command_count = 0;
 integer timeout = 0;
+integer write_count = 0;
+integer first_dma_clocks = 0;
+integer same_row_dma_clocks = 0;
+integer cross_row_dma_clocks = 0;
+logic [15:0] written_word [0:3];
+integer write_burst_remaining = 0;
 
 always #4.365 clk = ~clk;
 
 gd_sdram dut(.*);
+assign SDRAM_DQ = dut.dq_oe ? 16'hzzzz : external_dq;
 
 // Minimal CAS-3, burst-length-4 SDRAM read model. Commands are sampled on
 // the forwarded SDRAM clock and returned data is changed on that same edge,
 // leaving it centered around the controller's following clk rising edge.
 always @(posedge SDRAM_CLK) begin
+	sdram_cycle = sdram_cycle + 1;
+	if ({SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} == 3'b100) begin
+		written_word[write_count] = dut.dq_out;
+		write_count = write_count + 1;
+		write_burst_remaining = 3;
+	end
+	else if (write_burst_remaining > 0) begin
+		written_word[write_count] = dut.dq_out;
+		write_count = write_count + 1;
+		write_burst_remaining = write_burst_remaining - 1;
+	end
 	if ({SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} == 3'b101) begin
-		read_delay = 3;
-		burst_word = 0;
+		if ((read_command_count & 1) == 0)
+			read_start0 = sdram_cycle + 3;
+		else
+			read_start1 = sdram_cycle + 3;
+		read_command_count = read_command_count + 1;
 	end
-	else if (read_delay > 1) begin
-		read_delay = read_delay - 1;
-	end
-	else if (read_delay == 1) begin
-		external_dq = 16'h1122;
-		read_delay = 0;
-		burst_word = 1;
-	end
-	else if (read_delay == 0 && burst_word < 4) begin
-		case (burst_word)
+	if ((sdram_cycle >= read_start0) && (sdram_cycle < read_start0 + 4)) begin
+		case (sdram_cycle - read_start0)
+			0: external_dq = 16'h1122;
 			1: external_dq = 16'h3344;
 			2: external_dq = 16'h5566;
 			default: external_dq = 16'h7788;
 		endcase
-		burst_word = burst_word + 1;
+	end
+	else if ((sdram_cycle >= read_start1)
+	         && (sdram_cycle < read_start1 + 4)) begin
+		case (sdram_cycle - read_start1)
+			0: external_dq = 16'h1122;
+			1: external_dq = 16'h3344;
+			2: external_dq = 16'h5566;
+			default: external_dq = 16'h7788;
+		endcase
 	end
 end
 
@@ -77,8 +103,46 @@ initial begin
 		$fatal(1, "DMA timeout state=%0d", dut.state);
 	if (video_dma_data !== 64'h7788_5566_3344_1122)
 		$fatal(1, "DMA row=%h", video_dma_data);
-	$display("PASS gd_sdram captured one registered CAS-3 burst-of-4 graphics row in %0d clocks",
-	         timeout);
+	first_dma_clocks = timeout;
+
+	// Production graphics reads use auto-precharge, so a second line in the
+	// same physical SDRAM row must complete with the same bounded latency.
+	@(negedge clk);
+	video_dma_addr = video_dma_addr + 25'd8;
+	video_dma_req = ~video_dma_req;
+	timeout = 0;
+	while ((video_dma_ack != video_dma_req) && timeout < 100) begin
+		@(posedge clk);
+		timeout = timeout + 1;
+	end
+	same_row_dma_clocks = timeout;
+	if (video_dma_ack != video_dma_req)
+		$fatal(1, "same-row DMA timeout state=%0d", dut.state);
+	if (same_row_dma_clocks != first_dma_clocks)
+		$fatal(1, "closed-page DMA latency changed first=%0d same=%0d",
+		       first_dma_clocks, same_row_dma_clocks);
+
+	// Crossing the 1 KiB row boundary uses the same auto-precharged sequence
+	// and must still return the complete burst correctly.
+	@(negedge clk);
+	video_dma_addr = video_dma_addr + 25'h0000400;
+	video_dma_req = ~video_dma_req;
+	timeout = 0;
+	while ((video_dma_ack != video_dma_req) && timeout < 100) begin
+		@(posedge clk);
+		timeout = timeout + 1;
+	end
+	cross_row_dma_clocks = timeout;
+	if (video_dma_ack != video_dma_req
+	    || video_dma_data !== 64'h7788_5566_3344_1122)
+		$fatal(1, "cross-row DMA failed clocks=%0d data=%h state=%0d",
+		       cross_row_dma_clocks, video_dma_data, dut.state);
+
+	if (cross_row_dma_clocks != first_dma_clocks)
+		$fatal(1, "closed-page cross-row latency changed first=%0d cross=%0d",
+		       first_dma_clocks, cross_row_dma_clocks);
+	$display("PASS gd_sdram DMA closed-page first=%0d same=%0d cross=%0d clocks",
+	         first_dma_clocks, same_row_dma_clocks, cross_row_dma_clocks);
 	$finish;
 end
 endmodule

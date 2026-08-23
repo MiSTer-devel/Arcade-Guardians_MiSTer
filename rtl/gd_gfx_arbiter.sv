@@ -12,6 +12,8 @@ module gd_gfx_arbiter
 	input  logic [24:0] loader_addr,
 	input  logic [15:0] loader_din,
 	input  logic  [1:0] loader_be,
+	input  logic        loader_burst,
+	input  logic [63:0] loader_burst_data,
 	input  logic        loader_rnw,
 	input  logic        loader_req,
 	output logic [15:0] loader_dout,
@@ -25,6 +27,8 @@ module gd_gfx_arbiter
 	output logic [24:0] mem_addr,
 	output logic [15:0] mem_din,
 	output logic  [1:0] mem_be,
+	output logic        mem_burst,
+	output logic [63:0] mem_burst_data,
 	output logic        mem_rnw,
 	output logic        mem_req,
 	input  logic [15:0] mem_dout,
@@ -90,6 +94,8 @@ always_ff @(posedge clk) begin
 		mem_addr <= 25'd0;
 		mem_din <= 16'd0;
 		mem_be <= 2'b11;
+		mem_burst <= 1'b0;
+		mem_burst_data <= 64'd0;
 		mem_rnw <= 1'b1;
 		mem_req <= 1'b0;
 		loader_busy <= 1'b0;
@@ -132,7 +138,7 @@ always_ff @(posedge clk) begin
 
 			RENDER_LOOKUP: begin
 				if (cache_valid_way0[
-				        renderer_addr_latched[CACHE_INDEX_BITS+1:3]]
+					        renderer_addr_latched[CACHE_INDEX_BITS+1:3]]
 				    && (cache_tag_way0_q
 				        == renderer_addr_latched[24:CACHE_INDEX_BITS+2])) begin
 					renderer_dout <= cache_data_way0_q;
@@ -204,6 +210,8 @@ always_ff @(posedge clk) begin
 				mem_addr <= loader_addr;
 				mem_din <= loader_din;
 				mem_be <= loader_be;
+				mem_burst <= loader_burst;
+				mem_burst_data <= loader_burst_data;
 				mem_rnw <= loader_rnw;
 				mem_req <= ~mem_req;
 				loader_req_latched <= loader_req;

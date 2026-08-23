@@ -32,7 +32,7 @@ module tb_gd_video_timing;
 			@(posedge clk);
 			clocks_since_pixel = clocks_since_pixel + 1;
 			if (ce_pix) begin
-				if (pixel_count != 0 && clocks_since_pixel != 10) begin
+				if (pixel_count != 0 && clocks_since_pixel != 11) begin
 					$display("FAIL pixel interval %0d", clocks_since_pixel);
 					$fatal(1);
 				end
@@ -52,7 +52,7 @@ module tb_gd_video_timing;
 	end
 
 	initial begin
-		#12000000;
+		#13500000;
 		$display("FAIL timeout");
 		$fatal(1);
 	end

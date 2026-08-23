@@ -1,6 +1,6 @@
 # Guardians / Denjin Makai II for MiSTer
 
-Version 1.1 is a native FPGA implementation of Winkysoft's 1995 arcade game,
+Version 1.1.1 is a native FPGA implementation of Winkysoft's 1995 arcade game,
 licensed to Banpresto,
 *Guardians / Denjin Makai II* for the MiSTer DE10-Nano platform.
 
@@ -10,7 +10,7 @@ copyrighted game ROMs are included in this repository or its releases.
 
 ## Install
 
-1. Copy `Guardians_20260822.rbf` to `/media/fat/_Arcade/cores/`.
+1. Copy `Guardians_20260823.rbf` to `/media/fat/_Arcade/cores/`.
 2. Copy `Guardians (Denjin Makai II).mra` to `/media/fat/_Arcade/`.
 3. Put a legally obtained, unmodified `grdians.zip` in
    `/media/fat/games/mame/`.
@@ -58,6 +58,10 @@ HQ2x/CRT choices produce 31-kHz output for computer CRTs and VGA displays.
   10-bit horizontal wrapping
 - Held-line DX-101 raster-IRQ re-arming for the game's two-line rowscroll
   effects on the native 410-pixel raster
+- A 75-MHz internal renderer, open-page graphics DMA, and thirteen-line
+  completion reservoir for stable rowscroll-heavy scenes
+- Packed-descriptor raster targeting that confines the Stage 1 heat effect to
+  its floating background layer without distorting foreground actors
 
 The memory design places the 32 MiB graphics bus in MiSTer's SDRAM and keeps
 program ROM, samples, and selected writable storage in DDR3. See
@@ -73,9 +77,8 @@ The release was built with Quartus Prime Lite 17.0 for the Cyclone V
 quartus_sh --flow compile Guardians
 ```
 
-The current build closes timing. The core clock has +2.315 ns setup slack; the
-worst slack across every reported timing domain is +0.573 ns setup and
-+0.196 ns hold.
+The 1.1.1 build closes timing with zero violated setup paths; its worst reported
+setup slack is +1.211 ns.
 
 ## Tests
 
@@ -94,10 +97,10 @@ gating, and TMP68301 behavior.
 The raster tests also cover ordinary line matches, held-line re-entry, and
 rejection of re-arm writes for future lines.
 
-The 1.1 release was also verified on a DE10-Nano with the release MRA and an
-unmodified ROM set. Long-run validation covered two complete attract-mode
-gameplay sequences without the previous descriptor collapse, stripe corruption,
-or raster loss.
+The 1.1.1 release was verified on a DE10-Nano with the release MRA and an
+unmodified ROM set. Hardware validation included a cold MRA boot and the Stage
+1 post-explosion sequence; the final build preserves the rowscrolled background
+effect without distorting foreground actors or truncating the upper background.
 
 ## Source and licensing
 

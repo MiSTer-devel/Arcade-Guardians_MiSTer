@@ -77,12 +77,16 @@ always_ff @(posedge clk) begin
 end
 
 integer i;
+integer scheduler_line;
+integer scheduler_x;
 initial begin
 	for(i=0;i<131072;i=i+1) sprite_memory[i]=0;
 	// A recorded raster scroll word replaces only the matching packed
 	// descriptor's word 2 before it enters the active scanline list.
-	force dut.sprite_pointer = 17'h00040;
 	force dut.scan_record_q = 64'h1234_5678_9abc_def0;
+	force dut.sprite_pointer = {15'h0010, 2'b00};
+	force dut.h3 = 16'h8000;
+	force dut.header_index = 9'd3;
 	rowscroll_override_valid = 1'b1;
 	rowscroll_override_record = 15'h0010;
 	rowscroll_override_data = 16'h7bf2;
@@ -93,9 +97,68 @@ initial begin
 	#1;
 	if (dut.scan_s2 !== 16'h5678)
 		$fatal(1, "rowscroll history changed a different descriptor");
+	// The same record address may be reused by a normal/foreground header.
+	// Rowscroll must remain confined to floating background layers.
+	rowscroll_override_record = 15'h0010;
+	force dut.h3 = 16'h0000;
+	#1;
+	if (dut.scan_s2 !== 16'h5678)
+		$fatal(1, "rowscroll leaked into a foreground layer");
+	force dut.h3 = 16'h8000;
+	force dut.header_index = 9'd1;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "rowscroll incorrectly depended on mutable header order");
+	// A different floating foreground descriptor must remain rigid even when
+	// it occupies the list slot formerly used by the heat background.
+	force dut.sprite_pointer = {15'h0011, 2'b00};
+	force dut.header_index = 9'd3;
+	#1;
+	if (dut.scan_s2 !== 16'h5678)
+		$fatal(1, "rowscroll leaked into a floating foreground descriptor");
+	// Sharing a floating page is not sufficient identity. Stage 1 uses two
+	// adjacent chunks on the same page and raster-scrolls only one at a time.
+	force dut.scan_record_q = 64'h1234_7a10_9abc_def0;
+	#1;
+	if (dut.scan_s2 !== 16'h7a10)
+		$fatal(1, "rowscroll matched a different record by page alone");
+	force dut.scan_record_q = 64'h1234_5678_9abc_def0;
 	rowscroll_override_valid = 1'b0;
-	release dut.sprite_pointer;
 	release dut.scan_record_q;
+	release dut.sprite_pointer;
+	release dut.h3;
+	release dut.header_index;
+	// The heat descriptor must not overwrite an actor pixel beyond X=63. This
+	// also catches the former six-bit shift truncation in the occupancy lookup.
+	if (dut.physical_draw_address(6'd25, 3'd2) !== 9'd202)
+		$fatal(1, "foreground occupancy address aliased X=202");
+	if (dut.heat_write_enable(1'b1, 1'b1, 1'b1) !== 1'b0)
+		$fatal(1, "heat layer overwrote an occupied foreground pixel");
+	if (dut.heat_write_enable(1'b1, 1'b0, 1'b1) !== 1'b1)
+		$fatal(1, "ordinary layer was incorrectly blocked by occupancy mask");
+	// Raster activity used to collapse the line queue to exactly one row,
+	// exposing busy tilemap lines as stale full-scanline repeats through actors.
+	// Frozen scroll history permits twelve-line look-ahead during the effect.
+	v_count = 9'd10;
+	force dut.next_render_line = 9'd22;
+	#1;
+	if (!dut.lookahead_ready)
+		$fatal(1, "raster activity disabled bounded line look-ahead");
+	force dut.next_render_line = 9'd23;
+	#1;
+	if (dut.lookahead_ready)
+		$fatal(1, "line reservoir rendered beyond its twelve free banks");
+	if (dut.packed_line_address(4'd12, 6'd37) !== 9'd493)
+		$fatal(1, "thirteenth packed line bank did not end at address 493");
+	release dut.next_render_line;
+	// Exact-line display selection needs enough initial lead for a cold row to
+	// complete. Check both the normal seed and native-raster wraparound.
+	v_count = 9'd10; #1;
+	if (dut.recovery_render_line !== 9'd22)
+		$fatal(1, "line scheduler did not seed twelve rows ahead");
+	v_count = 9'd250; #1;
+	if (dut.recovery_render_line !== 9'd4)
+		$fatal(1, "twelve-row recovery lead did not wrap at line 258");
 	// The output prefetch and line scheduler must wrap at the native
 	// 410x258 raster, not the old synthetic 512x256 MAME geometry.
 	h_count=9'd408; v_count=9'd257; #1;
@@ -141,7 +204,9 @@ initial begin
 	sprite_memory[17'h00402]=16'h0020;
 	sprite_memory[17'h00403]=16'h0000;
 	repeat(5) @(posedge clk); reset<=0;
-	@(posedge clk); ce_pix<=1; h_count<=0; v_count<=0;
+	// Current line 253 wraps the twelve-line recovery target to line 7, which
+	// remains inside this fixture's eight-line normal sprite.
+	@(posedge clk); ce_pix<=1; h_count<=0; v_count<=253;
 	@(posedge clk); ce_pix<=0; h_count<=1;
 	wait(busy);
 	wait(!busy && dut.state==dut.R_IDLE);
@@ -161,19 +226,61 @@ initial begin
 	sprite_memory[17'h00f81]=16'h0001;
 	sprite_memory[17'h00f82]=16'h0040;
 	sprite_memory[17'h00f83]=16'h0001;
-	@(posedge clk); ce_pix<=1; h_count<=0; v_count<=1;
+	// A real list replacement asserts sprite_buffer_busy into the renderer's
+	// reset input. Model that boundary here; otherwise look-ahead has correctly
+	// rendered line two before this testbench's artificial live RAM edits.
+	reset<=1;
+	repeat(3) @(posedge clk);
+	reset<=0;
+	// Current line 248 wraps the twelve-line recovery target to line 2, keeping
+	// this fixture on the same floating-tilemap source row it validates.
+	@(posedge clk); ce_pix<=1; h_count<=0; v_count<=248;
 	@(posedge clk); ce_pix<=0; h_count<=1;
 	wait(busy);
 	wait(!busy && dut.state==dut.R_IDLE);
 	@(posedge clk);
 	for(i=0;i<8;i=i+1)
-		if(line_buffer0_at(10+i) !== (15'h0021+i))
-			$fatal(1,"floating pixel %0d=%h",i,line_buffer0_at(10+i));
+		if(line_buffer1_at(10+i) !== (15'h0021+i))
+			$fatal(1,"floating pixel %0d=%h",i,line_buffer1_at(10+i));
+
+	// Exercise the complete raster scheduler, not just its combinational lead
+	// calculation. An invisible one-record list renders quickly enough to fill
+	// the twelve-row reservoir during the initial display line. The exact-line
+	// selector must acquire line 12 and remain locked thereafter; the previous
+	// startup policy stayed permanently behind and repeated one horizontal row
+	// over the full screen.
+	sprite_memory[17'h00401]=16'h0100;
+	reset<=1;
+	repeat(3) @(posedge clk);
+	reset<=0;
+	for (scheduler_line=0; scheduler_line<25;
+	     scheduler_line=scheduler_line+1) begin
+		for (scheduler_x=0; scheduler_x<410;
+		     scheduler_x=scheduler_x+1) begin
+			@(negedge clk);
+			ce_pix=1'b1;
+			h_count=scheduler_x;
+			v_count=scheduler_line;
+			@(negedge clk);
+			ce_pix=1'b0;
+			if ((scheduler_x == 0) && (scheduler_line >= 12)) begin
+				#1;
+				if (!dut.bank_valid[dut.display_bank]
+				    || (dut.bank_line[dut.display_bank] != scheduler_line))
+					$fatal(1,
+						"exact-line scheduler lost lock at raster %0d (bank=%0d tag=%0d valid=%b)",
+						scheduler_line, dut.display_bank,
+						dut.bank_line[dut.display_bank],
+						dut.bank_valid[dut.display_bank]);
+			end
+			repeat(3) @(negedge clk);
+		end
+	end
 	$display("PASS gd_dx101_video drew normal and floating-tilemap 8bpp rows");
 	$finish;
 end
 initial begin
-	#200000;
+	#1000000;
 	$display("timeout state=%0d busy=%b float_x=%0d sprite_addr=%h gfx_req=%b gfx_ack=%b target=%0d",
 		dut.state, busy, dut.float_x, sprite_address, gfx_req, gfx_ack,
 		dut.target_line);

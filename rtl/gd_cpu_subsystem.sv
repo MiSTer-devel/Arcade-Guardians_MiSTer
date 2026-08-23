@@ -60,8 +60,8 @@ module gd_cpu_subsystem
 );
 
 // fx68k advances on alternating Phi1/Phi2 enables. 33.333 MHz phase
-// events produce the TMP68301's 16.667 MHz CPU clock from 62.5 MHz.
-localparam logic [31:0] CPU_EVENT_INCREMENT = 32'd2290649225;
+// events produce the TMP68301's 16.667 MHz CPU clock from 68.75 MHz.
+localparam logic [31:0] CPU_EVENT_INCREMENT = 32'd2082408386;
 logic [31:0] cpu_clock_accumulator;
 logic [32:0] cpu_clock_sum;
 logic        cpu_half_phase;

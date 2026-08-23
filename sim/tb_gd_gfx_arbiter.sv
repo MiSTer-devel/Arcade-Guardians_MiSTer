@@ -8,6 +8,8 @@ logic cache_flush = 0;
 logic [24:0] loader_addr = 0;
 logic [15:0] loader_din = 0;
 logic [1:0] loader_be = 0;
+logic loader_burst = 0;
+logic [63:0] loader_burst_data = 0;
 logic loader_rnw = 0;
 logic loader_req = 0;
 logic [15:0] loader_dout;
@@ -19,6 +21,8 @@ logic renderer_ack;
 logic [24:0] mem_addr;
 logic [15:0] mem_din;
 logic [1:0] mem_be;
+logic mem_burst;
+logic [63:0] mem_burst_data;
 logic mem_rnw;
 logic mem_req;
 logic [15:0] mem_dout = 0;
@@ -50,8 +54,7 @@ initial begin
 	reset <= 0;
 	repeat (2) @(posedge clk);
 
-	// A miss must request exactly the renderer's eight-byte row. This is the
-	// latency-critical path used by the SDRAM burst-of-four port.
+	// A miss requests exactly the renderer's eight-byte row.
 	renderer_addr <= 25'h0000018;
 	renderer_req <= ~renderer_req;
 	do @(posedge clk); while (dma_req == dma_ack);

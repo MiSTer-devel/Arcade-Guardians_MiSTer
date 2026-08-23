@@ -21,6 +21,8 @@ module gd_rom_loader
 	output logic [24:0] gfx_addr,
 	output logic [15:0] gfx_din,
 	output logic  [1:0] gfx_be,
+	output logic        gfx_burst,
+	output logic [63:0] gfx_burst_data,
 	output logic        gfx_rnw,
 	output logic        gfx_req,
 	input  logic        gfx_ack,
@@ -78,6 +80,8 @@ always_ff @(posedge clk) begin
 		gfx_addr <= 25'd0;
 		gfx_din <= 16'd0;
 		gfx_be <= 2'b11;
+		gfx_burst <= 1'b0;
+		gfx_burst_data <= 64'd0;
 		gfx_rnw <= 1'b0;
 		gfx_req <= 1'b0;
 		rom_ready <= 1'b0;
@@ -113,6 +117,7 @@ always_ff @(posedge clk) begin
 					gfx_addr <= gfx_word_address;
 					gfx_din <= {gfx_upper, ioctl_data};
 					gfx_be <= 2'b11;
+					gfx_burst <= 1'b0;
 					gfx_rnw <= 1'b0;
 					gfx_req <= ~gfx_req;
 					gfx_word_pending <= 1'b1;

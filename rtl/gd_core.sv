@@ -34,6 +34,8 @@ module gd_core
 	output logic [24:0] sdram_mem_addr,
 	output logic [15:0] sdram_mem_din,
 	output logic  [1:0] sdram_mem_be,
+	output logic        sdram_mem_burst,
+	output logic [63:0] sdram_mem_burst_data,
 	output logic        sdram_mem_rnw,
 	output logic        sdram_mem_req,
 	input  logic [15:0] sdram_mem_dout,
@@ -79,6 +81,8 @@ logic [2:0] regions_seen;
 logic [24:0] loader_gfx_addr;
 logic [15:0] loader_gfx_din;
 logic [1:0] loader_gfx_be;
+logic loader_gfx_burst;
+logic [63:0] loader_gfx_burst_data;
 logic loader_gfx_rnw;
 logic loader_gfx_req;
 logic loader_gfx_ack;
@@ -90,6 +94,7 @@ gd_rom_loader loader
 	.ioctl_wait(rom_wait), .ddr_load_wr, .ddr_load_addr, .ddr_load_data,
 	.ddr_load_wait, .ddr_load_idle, .gfx_addr(loader_gfx_addr),
 	.gfx_din(loader_gfx_din), .gfx_be(loader_gfx_be),
+	.gfx_burst(loader_gfx_burst), .gfx_burst_data(loader_gfx_burst_data),
 	.gfx_rnw(loader_gfx_rnw), .gfx_req(loader_gfx_req),
 	.gfx_ack(loader_gfx_ack), .rom_ready,
 	.layout_error, .accepted_bytes, .regions_seen
@@ -235,12 +240,15 @@ gd_gfx_arbiter gfx_arbiter
 	.clk, .reset(cold_reset), .cache_flush(rom_downloading),
 	.loader_addr(loader_gfx_addr),
 	.loader_din(loader_gfx_din), .loader_be(loader_gfx_be),
+	.loader_burst(loader_gfx_burst),
+	.loader_burst_data(loader_gfx_burst_data),
 	.loader_rnw(loader_gfx_rnw), .loader_req(loader_gfx_req),
 	.loader_dout(unused_loader_dout), .loader_ack(loader_gfx_ack),
 	.renderer_addr(renderer_gfx_addr), .renderer_req(renderer_gfx_req),
 	.renderer_dout(renderer_gfx_dout), .renderer_ack(renderer_gfx_ack),
 	.mem_addr(sdram_mem_addr), .mem_din(sdram_mem_din),
 	.mem_be(sdram_mem_be), .mem_rnw(sdram_mem_rnw),
+	.mem_burst(sdram_mem_burst), .mem_burst_data(sdram_mem_burst_data),
 	.mem_req(sdram_mem_req), .mem_dout(sdram_mem_dout),
 	.mem_ack(sdram_mem_ack),
 	.dma_addr(sdram_dma_addr), .dma_req(sdram_dma_req),
@@ -256,7 +264,8 @@ gd_dx101_video #(.AHEAD_RENDER(1'b1)) video
 	.rowscroll_override_data,
 	.video_x_offset, .video_x_zoom, .video_y_offset, .video_y_zoom,
 	.sprite_address(sprite_video_address),
-	.sprite_q(sprite_video_q), .palette_address(palette_video_address),
+	.sprite_q(sprite_video_q),
+	.palette_address(palette_video_address),
 	.palette_q(palette_video_q), .gfx_addr(renderer_gfx_addr),
 	.gfx_req(renderer_gfx_req), .gfx_dout(renderer_gfx_dout),
 	.gfx_ack(renderer_gfx_ack), .red(renderer_red), .green(renderer_green),

@@ -134,6 +134,11 @@ video_mixer #(.LINE_LENGTH(WIDTH+4), .HALF_DEPTH(DW!=24), .GAMMA(GAMMA)) video_m
 	.HBlank(HBL),
 	.VBlank(VBL),
 
+	// Keep the framework mixer deterministic when this legacy wrapper is
+	// used by a core that does not expose the optional freeze engine.
+	.HDMI_FREEZE(1'b0),
+	.freeze_sync(),
+
 	.VGA_R(VGA_R),
 	.VGA_G(VGA_G),
 	.VGA_B(VGA_B),

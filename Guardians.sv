@@ -35,7 +35,6 @@ localparam CONF_STR = {
 	"Guardians;;",
 	"-;",
 	"P1,Hardware;",
-	"P1O[2],Diagnostic raster,Off,On;",
 	"P1O[3],Test / service mode,Off,On;",
 	"P1-;",
 	"O46,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
@@ -114,6 +113,8 @@ wire sdram_ready;
 wire [24:0] sdram_mem_addr;
 wire [15:0] sdram_mem_din;
 wire [1:0] sdram_mem_be;
+wire sdram_mem_burst;
+wire [63:0] sdram_mem_burst_data;
 wire sdram_mem_rnw;
 wire sdram_mem_req;
 wire [15:0] sdram_mem_dout;
@@ -130,6 +131,7 @@ gd_sdram graphics_sdram
 	.SDRAM_nWE, .SDRAM_nCAS, .SDRAM_nRAS,
 	.mem_addr(sdram_mem_addr), .mem_din(sdram_mem_din),
 	.mem_be(sdram_mem_be), .mem_rnw(sdram_mem_rnw),
+	.mem_burst(sdram_mem_burst), .mem_burst_data(sdram_mem_burst_data),
 	.mem_req(sdram_mem_req), .mem_dout(sdram_mem_dout),
 	.mem_ack(sdram_mem_ack), .video_dma_req(sdram_dma_req),
 	.video_dma_addr(sdram_dma_addr), .video_dma_ack(sdram_dma_ack),
@@ -157,7 +159,7 @@ gd_core core
 (
 	.clk(clk_sys), .cold_reset, .reset,
 	.memory_ready(memory_ready_sys),
-	.diagnostic_grid(!rom_ready | status[2]), .service(status[3]),
+	.diagnostic_grid(1'b0), .service(status[3]),
 	.dip_switches, .joystick_p1, .joystick_p2,
 	.rom_downloading(ioctl_download && (ioctl_index == 16'd0)),
 	.rom_wr(ioctl_wr && (ioctl_index == 16'd0)),
@@ -168,6 +170,7 @@ gd_core core
 	.ddr_rd(DDRAM_RD), .ddr_din(DDRAM_DIN), .ddr_be(DDRAM_BE),
 	.ddr_we(DDRAM_WE), .sdram_mem_addr, .sdram_mem_din, .sdram_mem_be,
 	.sdram_mem_rnw, .sdram_mem_req, .sdram_mem_dout, .sdram_mem_ack,
+	.sdram_mem_burst, .sdram_mem_burst_data,
 	.sdram_dma_addr, .sdram_dma_req, .sdram_dma_data, .sdram_dma_ack,
 	.ce_pix, .hblank, .hsync, .vblank, .vsync,
 	.red, .green, .blue, .audio_left(core_audio_left),
@@ -176,24 +179,20 @@ gd_core core
 );
 
 wire [2:0] video_fx = status[6:4];
-wire scandoubler = forced_scandoubler || (video_fx != 3'd0);
-wire [2:0] scanline_level = video_fx ? video_fx - 3'd1 : 3'd0;
 
-assign CLK_VIDEO = clk_sys;
-assign VGA_SL = scanline_level[1:0];
-
-// Guardians is a native 15-kHz arcade board. Keep that timing on analog RGB
-// by default, but honour MiSTer's forced_scandoubler setting for 31-kHz VGA
-// displays. The same framework mixer also gives HDMI and analog output a
-// single, well-tested sync/gamma path.
-video_mixer #(.LINE_LENGTH(304), .HALF_DEPTH(0), .GAMMA(1)) video_out
+// Align sync, blanking and RGB on pixel boundaries before MiSTer's HDMI/VGA
+// scaler captures them. Feeding the raw VBlank transition straight into
+// video_mixer leaves its registered DE high for the first blank line and low
+// for the first visible line. Raw core screenshots do not expose that fault,
+// but the scaler-backed analog output can show displaced horizontal slices.
+// arcade_video also supplies video_mixer's required WIDTH+4 line-store stride.
+arcade_video #(.WIDTH(304), .DW(24), .GAMMA(1)) video_out
 (
-	.CLK_VIDEO(clk_sys), .CE_PIXEL, .ce_pix,
-	.scandoubler, .hq2x(video_fx == 3'd1), .gamma_bus,
-	.R(red), .G(green), .B(blue),
-	.HSync(hsync), .VSync(vsync), .HBlank(hblank), .VBlank(vblank),
-	.HDMI_FREEZE(1'b0), .freeze_sync(),
-	.VGA_R, .VGA_G, .VGA_B, .VGA_VS, .VGA_HS, .VGA_DE
+	.clk_video(clk_sys), .ce_pix, .RGB_in({red, green, blue}),
+	.HBlank(hblank), .VBlank(vblank), .HSync(hsync), .VSync(vsync),
+	.CLK_VIDEO, .CE_PIXEL, .VGA_R, .VGA_G, .VGA_B,
+	.VGA_HS, .VGA_VS, .VGA_DE, .VGA_SL,
+	.fx(video_fx), .forced_scandoubler, .gamma_bus
 );
 assign AUDIO_L = core_audio_left;
 assign AUDIO_R = core_audio_right;

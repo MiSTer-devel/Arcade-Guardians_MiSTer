@@ -10,9 +10,9 @@
 
 module gd_dx101_video
 #(
-	// Rendering more than one row ahead can expose sprite/tilemap state before
-	// the physical raster reaches it. Keep production rendering exactly one
-	// scanline ahead; the parameter remains available for controlled tests.
+	// Thirteen line banks allow the renderer to absorb expensive tilemap rows.
+	// Raster-scroll words come from the frozen preceding-frame history, so the
+	// same bounded look-ahead is safe while raster effects are active.
 	parameter bit AHEAD_RENDER = 1'b0
 )
 (
@@ -53,46 +53,50 @@ module gd_dx101_video
 );
 
 // Eight X-interleaved memories turn an eight-pixel draw into one write per
-// physical RAM. Pack all four look-ahead buffers into the depth of each lane
-// so Quartus infers eight synchronous M10Ks instead of 32 asynchronous arrays
-// implemented in more than ten thousand ALMs.
-(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank0 [0:151];
-(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank1 [0:151];
-(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank2 [0:151];
-(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank3 [0:151];
-(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank4 [0:151];
-(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank5 [0:151];
-(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank6 [0:151];
-(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank7 [0:151];
+// physical RAM. Pack all thirteen logical line buffers into each lane.
+// A 494x15-bit lane still fits in one 512x20 M10K, so the maximum twelve-row
+// completed-line reservoir does not consume another RAM block. The extra depth absorbs
+// the clustered cache misses produced by rowscrolled tilemaps instead of
+// repeating a completed scanline through foreground actors.
+(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank0 [0:493];
+(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank1 [0:493];
+(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank2 [0:493];
+(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank3 [0:493];
+(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank4 [0:493];
+(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank5 [0:493];
+(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank6 [0:493];
+(* ramstyle = "M10K, no_rw_check" *) logic [14:0] line_buffer_bank7 [0:493];
 logic [14:0] line_read_data [0:7];
-logic [7:0] line_read_address;
-logic [1:0] display_bank;
-logic [1:0] work_bank;
-logic [3:0] bank_valid;
-logic [8:0] bank_line [0:3];
+logic [8:0] line_read_address;
+logic [3:0] display_bank;
+logic [3:0] work_bank;
+logic [12:0] bank_valid;
+logic [8:0] bank_line [0:12];
 logic       scheduler_started;
 logic       schedule_pending;
 logic [8:0] next_render_line;
 logic [8:0] render_distance;
-logic [3:0] display_match;
+logic       lookahead_ready;
+logic [12:0] display_match;
 logic       selected_bank_found;
-logic [1:0] selected_bank;
-logic [8:0] selected_age;
-logic [8:0] bank_age0;
-logic [8:0] bank_age1;
-logic [8:0] bank_age2;
-logic [8:0] bank_age3;
+logic [3:0] selected_bank;
 logic       free_bank_found;
-logic [1:0] free_bank;
+logic [3:0] free_bank;
+logic [12:0] free_bank_mask;
 logic [8:0] target_line;
 logic [8:0] clear_x;
 integer line_bank_index;
+integer select_bank_index;
 localparam integer H_TOTAL = 410;
 localparam integer V_TOTAL = 258;
+localparam integer V_ACTIVE = 232;
 localparam integer V_HALF = V_TOTAL / 2;
 
 wire [8:0] physical_next_line = (v_count == V_TOTAL - 1)
 	? 9'd0 : (v_count + 9'd1);
+wire [9:0] recovery_line_sum = {1'b0, v_count} + 10'd12;
+wire [8:0] recovery_render_line = (recovery_line_sum >= V_TOTAL)
+	? (recovery_line_sum - V_TOTAL) : recovery_line_sum[8:0];
 always_comb rowscroll_lookup_line = target_line;
 
 function automatic [8:0] line_forward_distance;
@@ -172,91 +176,95 @@ endfunction
 // A DX-101 list can contain hundreds of one-tile descriptors even though
 // only a few intersect a given scanline. Scan the 64-bit records into a
 // compact active list, then spend renderer cycles only on contributing rows.
-(* ramstyle = "M10K" *) logic [127:0] active_records [0:127];
-logic [127:0] active_record_q;
+// Bit 128 tags the one floating descriptor whose scroll word was rewritten
+// by the raster handler. The payload remains the original 128-bit header +
+// descriptor record.
+(* ramstyle = "M10K" *) logic [128:0] active_records [0:127];
+logic [128:0] active_record_q;
 logic [7:0] active_count;
 logic [7:0] active_total;
 logic [7:0] active_index;
 
+// Preserve already-rendered actors when the late rowscrolled heat plane is
+// composited. Only non-floating descriptors populate this mask, and only the
+// exact raster-rewritten descriptor consults it.
+logic [303:0] foreground_occupancy;
+logic         record_rowscroll_target;
+
 always_comb begin
 	render_distance = line_forward_distance(v_count, next_render_line);
-	display_match[0] = bank_valid[0] && (bank_line[0] == v_count);
-	display_match[1] = bank_valid[1] && (bank_line[1] == v_count);
-	display_match[2] = bank_valid[2] && (bank_line[2] == v_count);
-	display_match[3] = bank_valid[3] && (bank_line[3] == v_count);
-	bank_age0 = line_forward_distance(bank_line[0], v_count);
-	bank_age1 = line_forward_distance(bank_line[1], v_count);
-	bank_age2 = line_forward_distance(bank_line[2], v_count);
-	bank_age3 = line_forward_distance(bank_line[3], v_count);
-	selected_bank_found = 1'b1;
-	selected_age = 8'd0;
-	if (display_match[0]) selected_bank = 2'd0;
-	else if (display_match[1]) selected_bank = 2'd1;
-	else if (display_match[2]) selected_bank = 2'd2;
-	else if (display_match[3]) selected_bank = 2'd3;
-	else begin
-		// A completed row can occasionally arrive just after its raster
-		// slot. Prefer the newest such row over freezing an older display
-		// bank; look-ahead rendering can then recover on a simpler row.
-		selected_bank_found = 1'b0;
-		selected_bank = display_bank;
-	selected_age = 9'h1ff;
-	if (bank_valid[0] && (bank_age0 != 8'd0)
-	    && (bank_age0 <= V_HALF) && (bank_age0 < selected_age)) begin
-			selected_bank_found = 1'b1;
-			selected_bank = 2'd0;
-			selected_age = bank_age0;
-		end
-	if (bank_valid[1] && (bank_age1 != 8'd0)
-	    && (bank_age1 <= V_HALF) && (bank_age1 < selected_age)) begin
-			selected_bank_found = 1'b1;
-			selected_bank = 2'd1;
-			selected_age = bank_age1;
-		end
-	if (bank_valid[2] && (bank_age2 != 8'd0)
-	    && (bank_age2 <= V_HALF) && (bank_age2 < selected_age)) begin
-			selected_bank_found = 1'b1;
-			selected_bank = 2'd2;
-			selected_age = bank_age2;
-		end
-	if (bank_valid[3] && (bank_age3 != 8'd0)
-	    && (bank_age3 <= V_HALF) && (bank_age3 < selected_age)) begin
-			selected_bank_found = 1'b1;
-			selected_bank = 2'd3;
-			selected_age = bank_age3;
-		end
+	lookahead_ready = AHEAD_RENDER
+		&& (render_distance >= 9'd1) && (render_distance <= 9'd12);
+	for (select_bank_index = 0; select_bank_index < 13;
+	     select_bank_index = select_bank_index + 1) begin
+		display_match[select_bank_index] = bank_valid[select_bank_index]
+			&& (bank_line[select_bank_index] == v_count);
 	end
-	free_bank_found = 1'b0;
-	free_bank = 2'd0;
-	if (!bank_valid[0] && (display_bank != 2'd0)) begin
-		free_bank_found = 1'b1;
-		free_bank = 2'd0;
-	end
-	else if (!bank_valid[1] && (display_bank != 2'd1)) begin
-		free_bank_found = 1'b1;
-		free_bank = 2'd1;
-	end
-	else if (!bank_valid[2] && (display_bank != 2'd2)) begin
-		free_bank_found = 1'b1;
-		free_bank = 2'd2;
-	end
-	else if (!bank_valid[3] && (display_bank != 2'd3)) begin
-		free_bank_found = 1'b1;
-		free_bank = 2'd3;
-	end
+
+	// Exact-line selection is a shallow parallel encoder.  Do not feed the
+	// previous minimum-age search into the synchronous bank-valid writeback:
+	// that serialized eight 9-bit comparisons into a 26-level timing path.
+	// A miss simply holds the displayed row while the twelve-line reservoir
+	// recovers, and stale completed rows are reclaimed independently below.
+	selected_bank_found = |display_match;
+	casez (display_match)
+		13'b????????????1: selected_bank = 4'd0;
+		13'b???????????10: selected_bank = 4'd1;
+		13'b??????????100: selected_bank = 4'd2;
+		13'b?????????1000: selected_bank = 4'd3;
+		13'b????????10000: selected_bank = 4'd4;
+		13'b???????100000: selected_bank = 4'd5;
+		13'b??????1000000: selected_bank = 4'd6;
+		13'b?????10000000: selected_bank = 4'd7;
+		13'b????100000000: selected_bank = 4'd8;
+		13'b???1000000000: selected_bank = 4'd9;
+		13'b??10000000000: selected_bank = 4'd10;
+		13'b?100000000000: selected_bank = 4'd11;
+		13'b1000000000000: selected_bank = 4'd12;
+		default: selected_bank = display_bank;
+	endcase
+
+	free_bank_mask = ~bank_valid;
+	free_bank_mask[display_bank] = 1'b0;
+	free_bank_found = |free_bank_mask;
+	casez (free_bank_mask)
+		13'b????????????1: free_bank = 4'd0;
+		13'b???????????10: free_bank = 4'd1;
+		13'b??????????100: free_bank = 4'd2;
+		13'b?????????1000: free_bank = 4'd3;
+		13'b????????10000: free_bank = 4'd4;
+		13'b???????100000: free_bank = 4'd5;
+		13'b??????1000000: free_bank = 4'd6;
+		13'b?????10000000: free_bank = 4'd7;
+		13'b????100000000: free_bank = 4'd8;
+		13'b???1000000000: free_bank = 4'd9;
+		13'b??10000000000: free_bank = 4'd10;
+		13'b?100000000000: free_bank = 4'd11;
+		13'b1000000000000: free_bank = 4'd12;
+		default: free_bank = 4'd0;
+	endcase
 end
 
 logic [8:0] prefetch_x;
 logic [14:0] scan_index;
-function automatic [7:0] packed_line_address;
-	input [1:0] buffer_number;
+function automatic [8:0] packed_line_address;
+	input [3:0] buffer_number;
 	input [5:0] row_number;
 	begin
 		case (buffer_number)
-			2'd0: packed_line_address = {2'd0, row_number};
-			2'd1: packed_line_address = 8'd38 + row_number;
-			2'd2: packed_line_address = 8'd76 + row_number;
-			default: packed_line_address = 8'd114 + row_number;
+			4'd0: packed_line_address = 9'd0 + row_number;
+			4'd1: packed_line_address = 9'd38 + row_number;
+			4'd2: packed_line_address = 9'd76 + row_number;
+			4'd3: packed_line_address = 9'd114 + row_number;
+			4'd4: packed_line_address = 9'd152 + row_number;
+			4'd5: packed_line_address = 9'd190 + row_number;
+			4'd6: packed_line_address = 9'd228 + row_number;
+			4'd7: packed_line_address = 9'd266 + row_number;
+			4'd8: packed_line_address = 9'd304 + row_number;
+			4'd9: packed_line_address = 9'd342 + row_number;
+			4'd10: packed_line_address = 9'd380 + row_number;
+			4'd11: packed_line_address = 9'd418 + row_number;
+			default: packed_line_address = 9'd456 + row_number;
 		endcase
 	end
 endfunction
@@ -392,6 +400,24 @@ function automatic [7:0] mask_pen;
 	end
 endfunction
 
+function automatic [8:0] physical_draw_address;
+	input [5:0] row;
+	input [2:0] column;
+	begin
+		physical_draw_address = {row, column};
+	end
+endfunction
+
+function automatic heat_write_enable;
+	input draw_enable;
+	input rowscroll_target;
+	input foreground_occupied;
+	begin
+		heat_write_enable = draw_enable
+			&& !(rowscroll_target && foreground_occupied);
+	end
+endfunction
+
 // Exact graphics row for the same normal-sprite tile four physical lines
 // later. This crosses an 8-pixel tile boundary using the descriptor's
 // horizontal size and vertical flip, avoiding speculative sprite-state reads.
@@ -451,8 +477,14 @@ endfunction
 wire scan_record_visible = sprite_intersects_line(
 	h0, h1, h2, h3, scan_record_q[15:0], scan_record_q[31:16],
 	target_line, video_y_offset, video_y_zoom);
-wire [15:0] scan_s2 = rowscroll_override_valid
-	&& (sprite_pointer[16:2] == rowscroll_override_record)
+wire scan_rowscroll_target = rowscroll_override_valid
+	// Raster IRQ writes happen after the DX-101 has packed the display list into
+	// low sprite RAM. The captured address is therefore the packed destination
+	// record, exactly the identity carried by sprite_pointer while scanning the
+	// rewritten private headers. Stage 1 writes packed records 2 and 3.
+	&& h3[15]
+	&& (sprite_pointer[16:2] == rowscroll_override_record);
+wire [15:0] scan_s2 = scan_rowscroll_target
 	? rowscroll_override_data : scan_record_q[47:32];
 wire [127:0] scan_record_data = {
 	h0, h1, h2, h3,
@@ -464,13 +496,17 @@ wire [127:0] scan_record_data = {
 // Splitting the 128-bit read into fields in the main state machine causes
 // Quartus 17 to implement the array as thousands of registers.
 always_ff @(posedge clk) begin
-	if (reset)
+	if (reset) begin
 		scan_record_q <= 64'd0;
-	else if ((state == R_SPRITE_PIPE) || (state == R_SPRITE_CAPTURE))
+	end
+	else if ((state == R_SPRITE_PIPE) || (state == R_SPRITE_CAPTURE)) begin
 		scan_record_q <= sprite_q;
+	end
 	if ((state == R_SPRITE_CAPTURE) && scan_record_visible
 	    && (active_count < 8'd128))
-		active_records[active_count] <= scan_record_data;
+		active_records[active_count] <= {
+			scan_rowscroll_target, scan_record_data
+		};
 	if (state == R_ACTIVE_LOAD)
 		active_record_q <= active_records[active_index];
 end
@@ -544,14 +580,35 @@ always_comb begin
 	else if (state == R_GFX_DRAW) begin
 		for (route_column = 0; route_column < 8;
 		     route_column = route_column + 1) begin
-			line_write_enable[route_column] = draw_write_enable[route_column];
+			// Concatenation preserves the full nine-bit physical X address;
+			// shifting the six-bit row would alias every lookup into X=0..63.
+			route_address = physical_draw_address(
+				draw_write_row[route_column], route_column[2:0]);
+			line_write_enable[route_column] = heat_write_enable(
+				draw_write_enable[route_column], record_rowscroll_target,
+				foreground_occupancy[route_address]);
 			line_write_row[route_column] = draw_write_row[route_column];
 			line_write_data[route_column] = draw_write_data[route_column];
 		end
 	end
 end
 
+integer occupancy_column;
 always_ff @(posedge clk) begin
+	if (reset)
+		foreground_occupancy <= 304'd0;
+	else if ((state == R_CLEAR) && (clear_x == 9'd0))
+		foreground_occupancy <= 304'd0;
+	else if ((state == R_GFX_DRAW) && !float_mode) begin
+		for (occupancy_column = 0; occupancy_column < 8;
+		     occupancy_column = occupancy_column + 1) begin
+			if (draw_write_enable[occupancy_column])
+				foreground_occupancy[physical_draw_address(
+					draw_write_row[occupancy_column],
+					occupancy_column[2:0])] <= 1'b1;
+		end
+	end
+
 	line_read_data[0] <= line_buffer_bank0[line_read_address];
 	line_read_data[1] <= line_buffer_bank1[line_read_address];
 	line_read_data[2] <= line_buffer_bank2[line_read_address];
@@ -599,10 +656,10 @@ always_ff @(posedge clk) begin
 		state <= R_IDLE;
 		busy <= 1'b0;
 		line_done <= 1'b0;
-		display_bank <= 2'd0;
-		work_bank <= 2'd1;
-		bank_valid <= 4'd0;
-		for (line_bank_index = 0; line_bank_index < 4;
+		display_bank <= 4'd0;
+		work_bank <= 4'd1;
+		bank_valid <= 13'd0;
+		for (line_bank_index = 0; line_bank_index < 13;
 		     line_bank_index = line_bank_index + 1)
 			bank_line[line_bank_index] <= 9'd0;
 		scheduler_started <= 1'b0;
@@ -613,6 +670,7 @@ always_ff @(posedge clk) begin
 		active_count <= 8'd0;
 		active_total <= 8'd0;
 		active_index <= 8'd0;
+		record_rowscroll_target <= 1'b0;
 		sprite_address <= 17'd0;
 		gfx_addr <= 25'd0;
 		gfx_req <= 1'b0;
@@ -621,9 +679,11 @@ always_ff @(posedge clk) begin
 	else begin
 		line_done <= 1'b0;
 		if (ce_pix && (h_count == 9'd0)) begin
-			// Select the line tagged for the physical raster. If DDR latency
+			// Select only the line tagged for the physical raster. If DDR latency
 			// makes one line unusually expensive, keep displaying the prior
-			// completed line while the look-ahead queue catches up.
+			// completed line while the look-ahead queue catches up. Never substitute
+			// a different completed row: that duplicates a full scanline through
+			// both the rowscrolled background and foreground actors.
 			if (selected_bank_found) begin
 				if (display_bank != selected_bank)
 					bank_valid[display_bank] <= 1'b0;
@@ -635,10 +695,10 @@ always_ff @(posedge clk) begin
 				missed_lines <= missed_lines + 16'd1;
 
 			// Reclaim completed lines that arrived after their display slot.
-			for (line_bank_index = 0; line_bank_index < 4;
+			for (line_bank_index = 0; line_bank_index < 13;
 			     line_bank_index = line_bank_index + 1) begin
 				if ((line_bank_index != display_bank)
-				    && (!selected_bank_found || (line_bank_index != selected_bank))
+				    && !display_match[line_bank_index]
 				    && bank_valid[line_bank_index]
 				    && (line_forward_distance(bank_line[line_bank_index], v_count)
 				        > 9'd0)
@@ -650,27 +710,31 @@ always_ff @(posedge clk) begin
 			schedule_pending <= 1'b1;
 			if (!scheduler_started) begin
 				scheduler_started <= 1'b1;
-				next_render_line <= physical_next_line;
+				// A cold renderer cannot finish the immediately following row before
+				// its display slot. Seed it at the far end of the reservoir, then
+				// render consecutive rows while the raster catches up. Exact-only
+				// display selection otherwise remains permanently one row behind and
+				// repeats the startup row over the whole frame.
+				next_render_line <= recovery_render_line;
 			end
 			else if ((render_distance == 9'd0) || (render_distance > V_HALF))
-				next_render_line <= physical_next_line;
+				// Re-lock the same way after a genuinely late row. Twelve lines of
+				// lead are available without consuming another M10K.
+				next_render_line <= recovery_render_line;
 		end
 
 		case (state)
 			R_IDLE: begin
-				// Production starts the next physical row only. If a row finishes
-				// late, schedule_pending remains asserted and restarts from the
-				// current raster position instead of chasing stale row numbers.
-				// Experimental look-ahead is bounded to three completed rows.
+				// Keep up to twelve completed rows ahead. This absorbs the clustered
+				// tile-cache misses from wide floating layers instead of repeating
+				// a stale whole scanline through foreground actors. Frozen rowscroll
+				// history makes this safe during the Stage 1 heat effect as well.
 				if (scheduler_started && free_bank_found
-				    && (((AHEAD_RENDER && !raster_active)
-				         && (render_distance >= 8'd1)
-				         && (render_distance <= 8'd3))
-				        || ((!AHEAD_RENDER || raster_active)
-				            && schedule_pending))) begin
+				    && (lookahead_ready
+				        || (!AHEAD_RENDER && schedule_pending))) begin
 					work_bank <= free_bank;
 					bank_valid[free_bank] <= 1'b0;
-					target_line <= (AHEAD_RENDER && !raster_active)
+					target_line <= AHEAD_RENDER
 						? next_render_line
 						: physical_next_line;
 					clear_x <= 9'd0;
@@ -684,9 +748,16 @@ always_ff @(posedge clk) begin
 			end
 			R_CLEAR: begin
 				if (clear_x == 9'd296) begin
-					header_index <= 9'd0;
-					read_word <= 2'd0;
-					state <= R_HEADER_ISSUE;
+					// The native controller is blank below line 231. Do not rescan and
+					// draw the full sprite list for invisible rows; completing them after
+					// clear lets the reservoir refill before the next active frame.
+					if (target_line >= V_ACTIVE)
+						state <= R_DONE;
+					else begin
+						header_index <= 9'd0;
+						read_word <= 2'd0;
+						state <= R_HEADER_ISSUE;
+					end
 				end
 				else clear_x <= clear_x + 9'd8;
 			end
@@ -771,6 +842,7 @@ always_ff @(posedge clk) begin
 				state <= R_ACTIVE_WAIT;
 			end
 			R_ACTIVE_WAIT: begin
+				record_rowscroll_target <= active_record_q[128];
 				h0 <= active_record_q[127:112];
 				h1 <= active_record_q[111:96];
 				h2 <= active_record_q[95:80];

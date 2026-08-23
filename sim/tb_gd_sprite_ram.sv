@@ -87,7 +87,6 @@ initial begin
 	expect_record(17'h00000, 64'ha003_a002_a001_a000);
 	expect_record(17'h00004, 64'hb003_b002_b001_b000);
 	expect_record(17'h00008, 64'hc003_c002_c001_c000);
-
 	// Source edits wait for the next trigger, while low packed-record writes
 	// remain live for Guardians' raster effects.
 	write_word(17'h02000, 16'hdddd);

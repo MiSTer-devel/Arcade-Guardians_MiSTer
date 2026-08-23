@@ -1,25 +1,26 @@
-# Guardians MiSTer 1.1
+# Guardians MiSTer 1.1.1
 
-Hardware-fidelity and stability update for the native MiSTer FPGA core for
-Winkysoft's *Guardians / Denjin Makai II*, licensed to Banpresto.
+Renderer-performance, video-output, and Stage 1 raster-effect update for the
+native MiSTer FPGA core for Winkysoft's *Guardians / Denjin Makai II*, licensed
+to Banpresto.
 
 Highlights:
 
-- Restored the intro firewall's per-line raster distortion by replaying the
-  game's completed DX-101 rowscroll writes and correctly re-arming held-line
-  raster interrupts.
-- Restored missing top background chunks with the DX-101's 9-bit vertical
-  coordinate ring for sprites and floating tilemap windows.
-- Replaced synthetic MAME raster dimensions with the game's programmed
-  410x258 timing while retaining MiSTer's HDMI, analog RGB, scandoubler, and
-  video-effect paths.
-- Added D-pad-priority left-analog-stick movement for both players.
-- Hardened SDRAM graphics capture with registered input data.
+- Confined Stage 1's heat/rowscroll effect to its floating background layer;
+  foreground players, enemies, and objects no longer wobble over the affected
+  region.
+- Matched raster replay to the DX-101 private display list's rewritten packed
+  descriptor pointer, fixing the post-effect upper-background truncation.
+- Raised the renderer clock to 75 MHz, added open-page graphics DMA, and
+  expanded the completed-line reservoir to thirteen logical rows for stable
+  rowscroll-heavy scenes.
+- Corrected MiSTer's video-stage alignment and scandoubler line-store stride
+  for reliable HDMI and analog/scaler-backed output.
+- Removed the diagnostic loading grid and retained the stable ROM loader.
 - Passed the focused RTL regression suite and a clean Quartus Prime Lite 17.0
-  build with positive setup and hold slack.
-- Verified the final release RBF on a DE10-Nano through the included MRA,
-  including the Banpresto logo, firewall sequence, scrolling gameplay,
-  controls, and audio.
+  build with zero timing violations and +1.211 ns worst setup slack.
+- Verified the exact release RBF on a DE10-Nano with a cold MRA boot and the
+  Stage 1 post-explosion gameplay sequence.
 
 ## Credits
 
