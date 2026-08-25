@@ -1,8 +1,7 @@
-# Guardians MiSTer 1.1.1
+# Guardians MiSTer 1.2
 
-Renderer-performance, video-output, and Stage 1 raster-effect update for the
-native MiSTer FPGA core for Winkysoft's *Guardians / Denjin Makai II*, licensed
-to Banpresto.
+Native MiSTer FPGA core for Winkysoft's 1995 arcade game
+*Guardians / Denjin Makai II*, licensed to Banpresto.
 
 Highlights:
 
@@ -11,16 +10,28 @@ Highlights:
   region.
 - Matched raster replay to the DX-101 private display list's rewritten packed
   descriptor pointer, fixing the post-effect upper-background truncation.
-- Raised the renderer clock to 75 MHz, added open-page graphics DMA, and
-  expanded the completed-line reservoir to thirteen logical rows for stable
-  rowscroll-heavy scenes.
+- Raised the renderer clock to 68.75 MHz, added graphics-row DMA, and expanded
+  the completed-line reservoir for stable rowscroll-heavy scenes.
 - Corrected MiSTer's video-stage alignment and scandoubler line-store stride
   for reliable HDMI and analog/scaler-backed output.
-- Removed the diagnostic loading grid and retained the stable ROM loader.
+- Added optional horizontal/vertical size and position controls, PVM/cabinet
+  vertical-sizing modes, 180-degree rotation, and a +50% CPU Turbo option.
+- Added three standard MiSTer OSD cheat pages. General cheats provide infinite
+  credits and time; Player 1 and Player 2 each have independently selectable
+  lives, energy, power, invincibility, and always-special options.
+- Accelerated direct MRA loading by packing four graphics words per handshake.
+  The SDRAM controller issues four valid WRITE commands under one active row
+  and auto-precharges only the final word.
+- Implemented the DX-101's global half-scale mode for the stage-map/loading
+  screen. The map and preview now match the original board composition while
+  fixed-position gold frame graphics retain their native size.
+- Removed the diagnostic loading grid. No Linux helper, downloader, external
+  cheat file, modified ROM, or preprocessing script is required.
 - Passed the focused RTL regression suite and a clean Quartus Prime Lite 17.0
-  build with zero timing violations and +1.211 ns worst setup slack.
-- Verified the exact release RBF on a DE10-Nano with a cold MRA boot and the
-  Stage 1 post-explosion gameplay sequence.
+  build with zero timing violations and +0.845 ns worst setup slack.
+- Verified the exact release RBF on a DE10-Nano with a cold MRA boot. The
+  original game reported ROM checksum and RAM access OK before displaying
+  correctly decoded intro, loading-screen, and live-gameplay graphics.
 
 ## Credits
 
@@ -34,10 +45,11 @@ Highlights:
   community
 - MAME hardware-documentation references: Luca Elia, David Haywood, Manbow-J,
   and Olivier Galibert
+- Cheat address/value definitions: pasky13 via Pugsy's MAME Cheat Collection
 
 The modeled devices are the Toshiba TMP68301, NEC DX-101 / Allumer X1-020,
 and Seta X1-010. Intel/Altera-generated PLL IP retains its generated notices.
 
-Install the RBF and MRA using the paths documented in the README. ROM files are
-not included. See `CREDITS.md` for project, framework, processor-core, MAME
-hardware-reference, original-game, and FPGA-IP attribution.
+Extract the archive directly to the root of a MiSTer SD card. ROM files are not
+included. See `CREDITS.md` for project, framework, processor-core, MAME
+hardware-reference, original-game, cheat-reference, and FPGA-IP attribution.

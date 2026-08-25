@@ -1,6 +1,7 @@
 # Guardians / Denjin Makai II for MiSTer
 
-Version 1.1.1 is a native FPGA implementation of Winkysoft's 1995 arcade game,
+Version 1.2 is a native FPGA implementation of
+Winkysoft's 1995 arcade game,
 licensed to Banpresto,
 *Guardians / Denjin Makai II* for the MiSTer DE10-Nano platform.
 
@@ -39,7 +40,31 @@ mapped D-pad and each player's left analog stick, with a signed dead zone.
 
 The **Scandoubler Fx** menu leaves the original 15-kHz analog RGB timing intact
 when set to **None**. MiSTer's `forced_scandoubler=1` setting and the menu's
-HQ2x/CRT choices produce 31-kHz output for computer CRTs and VGA displays.
+HQ2x/CRT choices produce 31-kHz output for computer CRTs and VGA displays. CRT
+Geometry is automatically bypassed while one of these digital line effects or
+forced scandoubling is active so the MiSTer scandoubler always receives the
+native uniform pixel stream.
+
+The **CRT Geometry** OSD page provides independent **H Size**, **H Shift**,
+**V Size**, and **V Shift** controls, plus normal/180-degree rotation. All
+geometry is disabled by default, so the native raster is unchanged unless the
+option is explicitly enabled. PVM mode retimes the line cadence for unique-line
+vertical sizing; Cabinet mode retains native sync timing and uses a
+photometric vertical resize for arcade chassis with a narrower lock range.
+The vertical range is approximately +/-3.5%, deliberately kept within a useful
+15-kHz adjustment envelope while fitting beside the core's full M10K usage.
+
+**Turbo CPU (+50%)** raises the 68000-compatible CPU from 16.667 MHz to 25 MHz
+to reduce computation-driven slowdown. Raster timing, hardware timers, video,
+and X1-010 audio remain at PCB speed, so Turbo adds processing headroom rather
+than globally fast-forwarding the game. Turbo is off by default.
+
+The ordinary MiSTer OSD also includes three **Cheats** pages. General options
+provide infinite credits and time; separate Player 1 and Player 2 pages provide
+infinite lives, energy, power, invincibility, and an always-available special
+attack. Every cheat is off by default and is implemented inside the FPGA by
+clamping the documented work-RAM value on CPU reads and writes. No external
+cheat file, alternate ROM, downloader, or helper script is required.
 
 ## Implemented hardware
 
@@ -48,6 +73,8 @@ HQ2x/CRT choices produce 31-kHz output for computer CRTs and VGA displays.
 - Seta X1-010-compatible 16-voice PCM sound
 - Direct MRA assembly of the 2 MiB program, 32 MiB graphics, and 1 MiB sample
   regions
+- Four-word graphics-loader transactions using four standards-compliant SDRAM
+  WRITE commands under one active row
 - Board-programmed 410 x 258 raster with 304 x 232 visible pixels
   (15.244 kHz horizontal, 59.085 Hz vertical)
 - MiSTer scaler, HDMI, analog video, audio, controller, DIP, reset, and OSD
@@ -58,7 +85,7 @@ HQ2x/CRT choices produce 31-kHz output for computer CRTs and VGA displays.
   10-bit horizontal wrapping
 - Held-line DX-101 raster-IRQ re-arming for the game's two-line rowscroll
   effects on the native 410-pixel raster
-- A 75-MHz internal renderer, open-page graphics DMA, and thirteen-line
+- A 68.75-MHz internal renderer, open-page graphics DMA, and thirteen-line
   completion reservoir for stable rowscroll-heavy scenes
 - Packed-descriptor raster targeting that confines the Stage 1 heat effect to
   its floating background layer without distorting foreground actors
@@ -77,8 +104,8 @@ The release was built with Quartus Prime Lite 17.0 for the Cyclone V
 quartus_sh --flow compile Guardians
 ```
 
-The 1.1.1 build closes timing with zero violated setup paths; its worst reported
-setup slack is +1.211 ns.
+The 1.2 build closes timing with zero violated setup or hold paths; its worst
+reported setup slack is +0.845 ns.
 
 ## Tests
 
@@ -89,18 +116,24 @@ The focused RTL test suite uses Icarus Verilog 11 or newer:
 ```
 
 Set `IVERILOG` and `VVP` to full executable paths if they are not on `PATH`.
-The suite covers analog-stick conversion, video timing, DDR access, registered
-SDRAM DMA capture, graphics arbitration, DX-101 rendering, sprite-list
+The suite covers CRT geometry syntax, analog-stick conversion, video timing,
+DDR access, registered
+SDRAM DMA capture, four-command loader writes, graphics-stream packing,
+work-RAM cheat clamps, graphics arbitration, DX-101 rendering, loading-screen
+global zoom and fixed-position bypass, sprite-list
 buffering, native raster/prefetch wrap, 9-bit sprite and floating-layer Y
 wrapping, per-line rowscroll replay, circular object spans, raster look-ahead
 gating, and TMP68301 behavior.
 The raster tests also cover ordinary line matches, held-line re-entry, and
-rejection of re-arm writes for future lines.
+rejection of re-arm writes for future lines. Renderer checks also cover the
+normal and 180-degree coordinate origins without altering native sync timing.
 
-The 1.1.1 release was verified on a DE10-Nano with the release MRA and an
-unmodified ROM set. Hardware validation included a cold MRA boot and the Stage
-1 post-explosion sequence; the final build preserves the rowscrolled background
-effect without distorting foreground actors or truncating the upper background.
+Version 1.2 was verified on a DE10-Nano with the MRA and an unmodified
+ROM set. Hardware validation included a cold MRA boot, successful ROM checksum
+and RAM-access self-tests, correct intro graphics after four-word SDRAM loading,
+the correctly scaled stage-map/loading screen, and the Stage 1 post-explosion
+sequence. The renderer preserves the rowscrolled background effect without
+distorting foreground actors or truncating the upper background.
 
 ## Source and licensing
 

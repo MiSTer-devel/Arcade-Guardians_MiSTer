@@ -5,7 +5,6 @@ logic clk = 1'b0;
 logic reset = 1'b1;
 tri [15:0] SDRAM_DQ;
 logic [15:0] external_dq = 16'h0000;
-assign SDRAM_DQ = external_dq;
 wire [12:0] SDRAM_A;
 wire [1:0] SDRAM_BA;
 wire SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH;
@@ -35,7 +34,9 @@ integer first_dma_clocks = 0;
 integer same_row_dma_clocks = 0;
 integer cross_row_dma_clocks = 0;
 logic [15:0] written_word [0:3];
-integer write_burst_remaining = 0;
+logic [8:0] written_column [0:3];
+logic [1:0] written_bank [0:3];
+logic written_autoprecharge [0:3];
 
 always #4.365 clk = ~clk;
 
@@ -49,13 +50,10 @@ always @(posedge SDRAM_CLK) begin
 	sdram_cycle = sdram_cycle + 1;
 	if ({SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} == 3'b100) begin
 		written_word[write_count] = dut.dq_out;
+		written_column[write_count] = SDRAM_A[8:0];
+		written_bank[write_count] = SDRAM_BA;
+		written_autoprecharge[write_count] = SDRAM_A[10];
 		write_count = write_count + 1;
-		write_burst_remaining = 3;
-	end
-	else if (write_burst_remaining > 0) begin
-		written_word[write_count] = dut.dq_out;
-		write_count = write_count + 1;
-		write_burst_remaining = write_burst_remaining - 1;
 	end
 	if ({SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} == 3'b101) begin
 		if ((read_command_count & 1) == 0)
@@ -141,8 +139,38 @@ initial begin
 	if (cross_row_dma_clocks != first_dma_clocks)
 		$fatal(1, "closed-page cross-row latency changed first=%0d cross=%0d",
 		       first_dma_clocks, cross_row_dma_clocks);
-	$display("PASS gd_sdram DMA closed-page first=%0d same=%0d cross=%0d clocks",
-	         first_dma_clocks, same_row_dma_clocks, cross_row_dma_clocks);
+
+	// Four loader words share one ACTIVE row but each receives a real WRITE
+	// command because the mode register selects single-location write bursts.
+	@(negedge clk);
+	mem_addr = 25'h0012340;
+	mem_burst_data = 64'h7788_5566_3344_1122;
+	mem_burst = 1'b1;
+	mem_rnw = 1'b0;
+	mem_req = ~mem_req;
+	timeout = 0;
+	while ((mem_ack != mem_req) && timeout < 100) begin
+		@(posedge clk);
+		timeout = timeout + 1;
+	end
+	if (mem_ack != mem_req) $fatal(1, "loader block-write timeout");
+	if (write_count != 4)
+		$fatal(1, "loader issued %0d WRITE commands instead of four", write_count);
+	if (written_word[0] !== 16'h1122 || written_word[1] !== 16'h3344
+	    || written_word[2] !== 16'h5566 || written_word[3] !== 16'h7788)
+		$fatal(1, "loader write data %h %h %h %h", written_word[0],
+		       written_word[1], written_word[2], written_word[3]);
+	for (timeout = 0; timeout < 4; timeout = timeout + 1) begin
+		if (written_column[timeout] !== (mem_addr[9:1] + timeout))
+			$fatal(1, "loader column[%0d]=%h", timeout,
+			       written_column[timeout]);
+		if (written_bank[timeout] !== mem_addr[24:23])
+			$fatal(1, "loader bank[%0d]=%h", timeout, written_bank[timeout]);
+		if (written_autoprecharge[timeout] !== (timeout == 3))
+			$fatal(1, "loader auto-precharge[%0d]=%b", timeout,
+			       written_autoprecharge[timeout]);
+	end
+	$display("PASS gd_sdram DMA closed-page and four-command block writes");
 	$finish;
 end
 endmodule

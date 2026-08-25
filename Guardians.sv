@@ -36,15 +36,39 @@ localparam CONF_STR = {
 	"-;",
 	"P1,Hardware;",
 	"P1O[3],Test / service mode,Off,On;",
+	"P1O[26],Turbo CPU (+50%),Off,On;",
 	"P1-;",
 	"O46,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
+	"P2,CRT Geometry;",
+	"P2O[7],CRT Geometry,Off,On;",
+	"P2O[11:8],H Size,0,+1,+2,+3,+4,+5,+6,+7,-8,-7,-6,-5,-4,-3,-2,-1;",
+	"P2O[15:12],H Shift,0,+1,+2,+3,+4,+5,+6,+7,-8,-7,-6,-5,-4,-3,-2,-1;",
+	"P2O[18:16],V Size,0,+1,+2,+3,-3,-2,-1;",
+	"P2O[23:20],V Shift,0,+1,+2,+3,+4,+5,+6,+7,-8,-7,-6,-5,-4,-3,-2,-1;",
+	"P2O[24],V Size Mode,PVM,Cabinet;",
+	"P2O[25],Rotation,Normal,180 deg;",
+	"P3,Cheats - General;",
+	"P3O[27],Infinite Credits,Off,On;",
+	"P3O[28],Infinite Time,Off,On;",
+	"P4,Cheats - Player 1;",
+	"P4O[29],Infinite Lives,Off,On;",
+	"P4O[30],Infinite Energy,Off,On;",
+	"P4O[31],Infinite Power,Off,On;",
+	"P4O[32],Invincibility,Off,On;",
+	"P4O[33],Always Special,Off,On;",
+	"P5,Cheats - Player 2;",
+	"P5O[34],Infinite Lives,Off,On;",
+	"P5O[35],Infinite Energy,Off,On;",
+	"P5O[36],Infinite Power,Off,On;",
+	"P5O[37],Invincibility,Off,On;",
+	"P5O[38],Always Special,Off,On;",
 	"DIP;",
 	"-;",
 	"T[0],Reset;",
 	"R[0],Reset and close OSD;",
 	"J1,Attack,Jump,Special,-,Start,Coin,Service;",
 	"jn,A,B,X,Y,Start,Select,R;",
-	"v,1.0;",
+	"v,1.2;",
 	"V,v",`BUILD_DATE
 };
 
@@ -159,7 +183,9 @@ gd_core core
 (
 	.clk(clk_sys), .cold_reset, .reset,
 	.memory_ready(memory_ready_sys),
-	.diagnostic_grid(1'b0), .service(status[3]),
+	.diagnostic_grid(1'b0), .service(status[3]), .turbo(status[26]),
+	.rotate_180(status[25]),
+	.cheats(status[38:27]),
 	.dip_switches, .joystick_p1, .joystick_p2,
 	.rom_downloading(ioctl_download && (ioctl_index == 16'd0)),
 	.rom_wr(ioctl_wr && (ioctl_index == 16'd0)),
@@ -180,6 +206,104 @@ gd_core core
 
 wire [2:0] video_fx = status[6:4];
 
+// CRT geometry is deliberately outside the native game timing domain. The
+// game, raster IRQs and sound continue at board speed while the completed
+// video stream is resized/repositioned for an analog monitor. Geometry Off is
+// a registered pure passthrough through both stages.
+wire crt_geometry = status[7];
+// MiSTer's scandoubler/HQ2x engine requires the native, uniformly clocked
+// pixel stream. Geometry is an analog-monitor adjustment and must not retime
+// that source. This also gives Geometry Off a literal zero-processing bypass.
+wire crt_geometry_active = crt_geometry && (video_fx == 3'd0)
+	&& !forced_scandoubler;
+wire signed [4:0] crt_hsize = {{1{status[11]}}, status[11:8]};
+wire signed [8:0] crt_hshift = {{5{status[15]}}, status[15:12]};
+wire signed [5:0] crt_vshift = {{2{status[23]}}, status[23:20]};
+wire signed [3:0] crt_vsize_step = (status[18:16] <= 3'd3)
+	? $signed({1'b0, status[18:16]})
+	: $signed({1'b0, status[18:16]}) - 4'sd7;
+wire signed [5:0] crt_vsize_scaled_step =
+	{{2{crt_vsize_step[3]}}, crt_vsize_step};
+wire signed [5:0] crt_vsize = -(crt_vsize_scaled_step
+	+ (crt_vsize_scaled_step <<< 1));
+
+wire [7:0] crt_vz_red;
+wire [7:0] crt_vz_green;
+wire [7:0] crt_vz_blue;
+wire crt_vz_hsync;
+wire crt_vz_vsync;
+wire crt_vz_de;
+wire crt_vz_vblank;
+wire crt_vz_ce;
+
+// PVM mode changes line cadence while preserving one unique source line per
+// output line. Cabinet mode keeps native sync and performs photometric vertical
+// scaling for monitors with a narrow horizontal-lock range.
+crt_vsize #(.RING_LINES(22), .LINE_PX(304)) crt_vertical
+(
+	.clk(clk_sys), .pxl_cen(ce_pix), .active(crt_geometry_active),
+	.tube_mode(status[24]), .vsize(crt_vsize),
+	.r_in(red), .g_in(green), .b_in(blue),
+	.hs_in(hsync), .vs_in(vsync), .de_in(~(hblank | vblank)),
+	.vb_in(vblank), .r_out(crt_vz_red), .g_out(crt_vz_green),
+	.b_out(crt_vz_blue), .hs_out(crt_vz_hsync),
+	.vs_out(crt_vz_vsync), .de_out(crt_vz_de),
+	.vb_out(crt_vz_vblank), .ce_out(crt_vz_ce)
+);
+
+wire crt_hs_reference;
+logic crt_hs_reference_d;
+logic [7:0] crt_read_accumulator;
+wire crt_hs_reference_rise = crt_hs_reference
+	&& !crt_hs_reference_d;
+// clk_sys / native pixel clock = 11. Express the period in quarter-clocks so
+// one signed OSD step changes horizontal size by approximately 2.3 percent.
+wire [7:0] crt_read_period = 8'd44
+	+ {{3{crt_hsize[4]}}, crt_hsize};
+wire [8:0] crt_read_sum = {1'b0, crt_read_accumulator} + 9'd4;
+wire crt_read_tick = (crt_read_sum >= {1'b0, crt_read_period});
+
+always_ff @(posedge clk_sys) begin
+	crt_hs_reference_d <= crt_hs_reference;
+	if (reset || crt_hs_reference_rise)
+		crt_read_accumulator <= 8'd0;
+	else if (crt_read_tick)
+		crt_read_accumulator <= crt_read_sum[7:0] - crt_read_period;
+	else
+		crt_read_accumulator <= crt_read_sum[7:0];
+end
+
+wire [7:0] crt_out_red;
+wire [7:0] crt_out_green;
+wire [7:0] crt_out_blue;
+wire crt_out_hsync;
+wire crt_out_vsync;
+wire crt_out_hblank;
+wire crt_out_vblank;
+
+crt_adjust #(
+	.VTOTAL(258), .HTOTAL(410), .HPOS_MODE(0)
+) crt_horizontal (
+	.clk(clk_sys), .pxl_cen(crt_vz_ce), .pxl2_cen(crt_read_tick),
+	.active(crt_geometry_active), .hsize(crt_hsize), .hoffset(crt_hshift),
+	.voffset(crt_vshift), .r_in(crt_vz_red), .g_in(crt_vz_green),
+	.b_in(crt_vz_blue), .hs_in(crt_vz_hsync), .vs_in(crt_vz_vsync),
+	.hb_in(~crt_vz_de), .vb_in(crt_vz_vblank), .r_out(crt_out_red),
+	.g_out(crt_out_green), .b_out(crt_out_blue),
+	.hs_out(crt_out_hsync), .vs_out(crt_out_vsync),
+	.hb_out(crt_out_hblank), .vb_out(crt_out_vblank),
+	.hs_ref_out(crt_hs_reference)
+);
+
+wire video_ce = crt_geometry_active ? crt_read_tick : ce_pix;
+wire [7:0] video_red = crt_geometry_active ? crt_out_red : red;
+wire [7:0] video_green = crt_geometry_active ? crt_out_green : green;
+wire [7:0] video_blue = crt_geometry_active ? crt_out_blue : blue;
+wire video_hsync = crt_geometry_active ? crt_out_hsync : hsync;
+wire video_vsync = crt_geometry_active ? crt_out_vsync : vsync;
+wire video_hblank = crt_geometry_active ? crt_out_hblank : hblank;
+wire video_vblank = crt_geometry_active ? crt_out_vblank : vblank;
+
 // Align sync, blanking and RGB on pixel boundaries before MiSTer's HDMI/VGA
 // scaler captures them. Feeding the raw VBlank transition straight into
 // video_mixer leaves its registered DE high for the first blank line and low
@@ -188,8 +312,10 @@ wire [2:0] video_fx = status[6:4];
 // arcade_video also supplies video_mixer's required WIDTH+4 line-store stride.
 arcade_video #(.WIDTH(304), .DW(24), .GAMMA(1)) video_out
 (
-	.clk_video(clk_sys), .ce_pix, .RGB_in({red, green, blue}),
-	.HBlank(hblank), .VBlank(vblank), .HSync(hsync), .VSync(vsync),
+	.clk_video(clk_sys), .ce_pix(video_ce),
+	.RGB_in({video_red, video_green, video_blue}),
+	.HBlank(video_hblank), .VBlank(video_vblank),
+	.HSync(video_hsync), .VSync(video_vsync),
 	.CLK_VIDEO, .CE_PIXEL, .VGA_R, .VGA_G, .VGA_B,
 	.VGA_HS, .VGA_VS, .VGA_DE, .VGA_SL,
 	.fx(video_fx), .forced_scandoubler, .gamma_bus

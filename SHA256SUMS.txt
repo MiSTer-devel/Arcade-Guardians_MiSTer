@@ -1,0 +1,2 @@
+fc239d4881134f726097e73f0f6cd8564c941c9d9588238964f8e2791dca6876  _Arcade/cores/Guardians_20260824.rbf
+75447244c515785c6f84937b80bff206e9c3dbb2b47e760d50443da1de0b3d96  _Arcade/Guardians - Denjin Makai II (P-FG01-1 PCB).mra

@@ -39,9 +39,8 @@ localparam logic [26:0] IMAGE_END = 27'h2300000;
 
 logic downloading_d;
 logic completion_pending;
-logic gfx_word_pending;
-logic [24:0] gfx_word_address;
-logic [7:0] gfx_upper;
+logic gfx_block_pending;
+logic [24:0] gfx_block_address;
 
 wire stream_program = (ioctl_addr < PROGRAM_END);
 wire stream_graphics = (ioctl_addr >= PROGRAM_END)
@@ -49,10 +48,12 @@ wire stream_graphics = (ioctl_addr >= PROGRAM_END)
 wire stream_sample = (ioctl_addr >= GRAPHICS_END)
 	&& (ioctl_addr < IMAGE_END);
 
-// Graphics are written a word at a time to the low-latency SDRAM. Program and
+// Pack four adjacent graphics words behind one request/acknowledge handshake.
+// The SDRAM controller still issues four real WRITE commands, so this remains
+// valid with the mode register's single-location write setting. Program and
 // sample bytes continue to use the packed MiSTer DDR transport.
 assign ioctl_wait = !memory_ready
-	|| (stream_graphics ? gfx_word_pending : ddr_load_wait);
+	|| (stream_graphics ? gfx_block_pending : ddr_load_wait);
 
 // Present DDR-bound bytes directly to the memory packer. This keeps the
 // ready/valid decision in the same cycle as ioctl acceptance; registering a
@@ -74,9 +75,8 @@ always_ff @(posedge clk) begin
 	if (reset) begin
 		downloading_d <= 1'b0;
 		completion_pending <= 1'b0;
-		gfx_word_pending <= 1'b0;
-		gfx_word_address <= 25'd0;
-		gfx_upper <= 8'd0;
+		gfx_block_pending <= 1'b0;
+		gfx_block_address <= 25'd0;
 		gfx_addr <= 25'd0;
 		gfx_din <= 16'd0;
 		gfx_be <= 2'b11;
@@ -90,12 +90,12 @@ always_ff @(posedge clk) begin
 		regions_seen <= 3'd0;
 	end
 	else begin
-		if (gfx_word_pending && (gfx_ack == gfx_req))
-			gfx_word_pending <= 1'b0;
+		if (gfx_block_pending && (gfx_ack == gfx_req))
+			gfx_block_pending <= 1'b0;
 
 		if (downloading && !downloading_d) begin
 			completion_pending <= 1'b0;
-			gfx_word_pending <= 1'b0;
+			gfx_block_pending <= 1'b0;
 			rom_ready <= 1'b0;
 			layout_error <= 1'b0;
 			accepted_bytes <= 27'd0;
@@ -109,19 +109,30 @@ always_ff @(posedge clk) begin
 			end
 			else if (stream_graphics) begin
 				regions_seen[1] <= 1'b1;
-				if (!ioctl_addr[0]) begin
-					gfx_upper <= ioctl_data;
-					gfx_word_address <= ioctl_addr - PROGRAM_END;
-				end
-				else begin
-					gfx_addr <= gfx_word_address;
-					gfx_din <= {gfx_upper, ioctl_data};
-					gfx_be <= 2'b11;
-					gfx_burst <= 1'b0;
-					gfx_rnw <= 1'b0;
-					gfx_req <= ~gfx_req;
-					gfx_word_pending <= 1'b1;
-				end
+				case (ioctl_addr[2:0])
+					3'd0: begin
+						gfx_block_address <= ioctl_addr - PROGRAM_END;
+						gfx_burst_data[15:8] <= ioctl_data;
+					end
+					3'd1: begin
+						gfx_burst_data[7:0] <= ioctl_data;
+						gfx_din <= {gfx_burst_data[15:8], ioctl_data};
+					end
+					3'd2: gfx_burst_data[31:24] <= ioctl_data;
+					3'd3: gfx_burst_data[23:16] <= ioctl_data;
+					3'd4: gfx_burst_data[47:40] <= ioctl_data;
+					3'd5: gfx_burst_data[39:32] <= ioctl_data;
+					3'd6: gfx_burst_data[63:56] <= ioctl_data;
+					default: begin
+						gfx_burst_data[55:48] <= ioctl_data;
+						gfx_addr <= gfx_block_address;
+						gfx_be <= 2'b11;
+						gfx_burst <= 1'b1;
+						gfx_rnw <= 1'b0;
+						gfx_req <= ~gfx_req;
+						gfx_block_pending <= 1'b1;
+					end
+				endcase
 			end
 			else if (stream_sample) begin
 				regions_seen[2] <= 1'b1;
@@ -134,7 +145,7 @@ always_ff @(posedge clk) begin
 		if (downloading_d && !downloading)
 			completion_pending <= 1'b1;
 
-		if (completion_pending && ddr_load_idle && !gfx_word_pending) begin
+		if (completion_pending && ddr_load_idle && !gfx_block_pending) begin
 			rom_ready <= !layout_error && (&regions_seen)
 				&& (accepted_bytes == IMAGE_END);
 			completion_pending <= 1'b0;

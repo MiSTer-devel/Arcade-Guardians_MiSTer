@@ -12,6 +12,7 @@ logic rowscroll_override_valid=0;
 logic [14:0] rowscroll_override_record=0;
 logic [15:0] rowscroll_override_data=0;
 logic [15:0] video_control=0;
+logic rotate_180=0;
 logic [26:0] video_x_offset=0;
 logic [26:0] video_x_zoom=27'h0010000;
 logic [26:0] video_y_offset=0;
@@ -81,6 +82,45 @@ integer scheduler_line;
 integer scheduler_x;
 initial begin
 	for(i=0;i<131072;i=i+1) sprite_memory[i]=0;
+	// The stage-map/loading screen uses inverted -2.0 Y zoom and a phase of
+	// three source rows. Physical line 10 must therefore fetch source line 23;
+	// normal gameplay's -1.0 setting remains line+128.
+	if (dut.global_source_line(9'd10, 27'h7fc0000, 27'h7fe0000)
+	    !== 11'd23)
+		$fatal(1, "loading-screen Y zoom did not advance two source rows");
+	if (dut.global_source_line(9'd10, 27'h77f0000, 27'h7ff0000)
+	    !== 11'd138)
+		$fatal(1, "unit inverted Y zoom changed gameplay line mapping");
+	if (dut.global_source_line(9'd10, 27'd0, 27'h0010000)
+	    !== 11'd10)
+		$fatal(1, "non-inverted Y mode did not bypass global transform");
+	if (!dut.sprite_intersects_line(16'h8000, 16'h0000, 16'h0000,
+	        16'h0100, 16'h0000, 16'h0014, 9'd9,
+	        27'h7fc0000, 27'h7fe0000)
+	    || dut.sprite_intersects_line(16'h8000, 16'h0000, 16'h0000,
+	        16'h0100, 16'h0000, 16'h0014, 9'd4,
+	        27'h7fc0000, 27'h7fe0000))
+		$fatal(1, "active-list filter ignored loading-screen Y zoom");
+
+	// +2.0 X zoom produces a reciprocal half-pixel output step. Adjacent
+	// source pixels collapse in pairs, while fixed-position header bit 14
+	// keeps the loading-screen frame at native size.
+	force dut.tile_screen_x = 12'sd10;
+	force dut.flip_x = 1'b0;
+	force dut.h0 = 16'h0000;
+	video_x_zoom = 27'h0020000;
+	#1;
+	if ((dut.draw_pixel_x[0] !== 5) || (dut.draw_pixel_x[1] !== 5)
+	    || (dut.draw_pixel_x[2] !== 6) || (dut.draw_pixel_x[7] !== 8))
+		$fatal(1, "loading-screen X zoom did not shrink source pixels by half");
+	force dut.h0 = 16'h4000;
+	#1;
+	if ((dut.draw_pixel_x[0] !== 10) || (dut.draw_pixel_x[7] !== 17))
+		$fatal(1, "fixed-position header was incorrectly globally zoomed");
+	video_x_zoom = 27'h0010000;
+	release dut.tile_screen_x;
+	release dut.flip_x;
+	release dut.h0;
 	// A recorded raster scroll word replaces only the matching packed
 	// descriptor's word 2 before it enters the active scanline list.
 	force dut.scan_record_q = 64'h1234_5678_9abc_def0;
@@ -168,6 +208,21 @@ initial begin
 	h_count=9'd409; #1;
 	if (dut.prefetch_x !== 9'd1)
 		$fatal(1,"native prefetch wrap second pixel=%0d",dut.prefetch_x);
+	// Rotation changes only the renderer's source coordinates. The physical
+	// 410x258 scheduler and sync raster must remain untouched.
+	force dut.target_line = 9'd0;
+	rotate_180=1'b1; h_count=9'd0; #1;
+	if (dut.logical_target_line !== 9'd231
+	    || dut.display_x !== 9'd301
+	    || rowscroll_lookup_line !== 9'd231)
+		$fatal(1,"180-degree origin mapping line=%0d x=%0d scroll=%0d",
+			dut.logical_target_line,dut.display_x,rowscroll_lookup_line);
+	h_count=9'd301; #1;
+	if (dut.prefetch_x !== 9'd303 || dut.display_x !== 9'd0)
+		$fatal(1,"180-degree right-edge mapping prefetch=%0d x=%0d",
+			dut.prefetch_x,dut.display_x);
+	rotate_180=1'b0; h_count=9'd409;
+	release dut.target_line;
 	if (!dut.wrapped_span_contains(508,16,-510)
 	    || dut.wrapped_span_contains(508,16,-490))
 		$fatal(1,"signed 10-bit wrapped span comparison failed");

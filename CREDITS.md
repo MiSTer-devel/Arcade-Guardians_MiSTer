@@ -24,6 +24,16 @@ bundled framework sources include Alexey Melnikov, Till Harbaum, Sorgelig,
 Ludvig Strigeus, Kitrinx, Mike Simone, Grabulosaure, and bellwood420. MiSTer is
 developed by the wider MiSTer-devel community.
 
+## CRT geometry
+
+The optional CRT geometry output stages are adapted from
+[`MiSTer-CRT-Adjust`](https://github.com/rmonic79/MiSTer-CRT-Adjust) by
+Umberto Parisi (rmonic79), with contributions to `crt_adjust.sv` credited in
+its source header to Andrea Bogazzi (@asturur). The adapted source retains its
+GNU GPL v3-or-later notice. Guardians stores its native RGB555 pixels directly
+in these line buffers, preserving every palette bit while reducing FPGA block
+RAM use.
+
 ## Hardware documentation and behavioral references
 
 Public MAME source was used as hardware documentation and a behavioral
@@ -41,6 +51,14 @@ reference. No MAME source code is copied into the core. In particular:
 The emulated devices include the Toshiba TMP68301, NEC DX-101 / Allumer X1-020,
 and Seta X1-010. Device and company names are used only to identify the original
 hardware.
+
+## Cheat definitions
+
+The optional work-RAM cheats use address/value definitions from
+[Pugsy's MAME Cheat Collection](https://www.mamecheat.co.uk/). Its Guardians
+entry credits the game-specific definitions used here to pasky13. The public
+XML was used as a behavioral reference; it is not bundled, and no MAME cheat
+engine code is copied into the FPGA core.
 
 ## Generated FPGA IP
 

@@ -53,8 +53,10 @@ localparam logic [2:0] CMD_READ      = 3'b101;
 localparam logic [2:0] CMD_NOP       = 3'b111;
 
 // Burst length 4, sequential access, CAS 3, single-location write burst.
-// Graphics reads still return one complete eight-byte row per command, while
-// loader writes use the proven one-word transaction path.
+// Graphics reads return one complete eight-byte row per command. Loader block
+// writes deliberately issue four consecutive WRITE commands under one active
+// row; this is valid with single-location write mode and saves three redundant
+// ACTIVE/auto-precharge sequences per eight source bytes.
 localparam logic [12:0] MODE_REGISTER = 13'h232;
 
 // The production core runs this controller at 68.75 MHz. The initialization
@@ -367,17 +369,19 @@ always_ff @(posedge clk) begin
 			ST_BURST_WRITE: begin
 				SDRAM_BA <= latched_addr[24:23];
 				SDRAM_A <= 13'd0;
+				SDRAM_A[8:0] <= latched_addr[9:1] + burst_write_word;
 				SDRAM_DQML <= 1'b0;
 				SDRAM_DQMH <= 1'b0;
+				command <= CMD_WRITE;
 				case (burst_write_word)
 					3'd1: dq_out <= latched_burst_data[31:16];
 					3'd2: dq_out <= latched_burst_data[47:32];
 					default: dq_out <= latched_burst_data[63:48];
 				endcase
 				if (burst_write_word == 3'd3) begin
-					command <= CMD_PRECHARGE;
+					// Auto-precharge is attached to the fourth and final WRITE.
 					SDRAM_A[10] <= 1'b1;
-					delay_count <= 16'd3;
+					delay_count <= 16'd5;
 					state <= ST_WRITE_WAIT;
 				end
 				else burst_write_word <= burst_write_word + 3'd1;

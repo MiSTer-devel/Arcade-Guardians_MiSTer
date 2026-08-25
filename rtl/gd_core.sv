@@ -10,6 +10,9 @@ module gd_core
 	input  logic        memory_ready,
 	input  logic        diagnostic_grid,
 	input  logic        service,
+	input  logic        turbo,
+	input  logic        rotate_180,
+	input  logic [11:0] cheats,
 	input  logic [15:0] dip_switches,
 	input  logic [31:0] joystick_p1,
 	input  logic [31:0] joystick_p2,
@@ -175,7 +178,7 @@ assign video_reg_address = 5'd0;
 gd_cpu_subsystem cpu
 (
 	.clk, .reset(runtime_reset), .vblank, .raster_irq, .dip_switches,
-	.joystick_p1, .joystick_p2, .service,
+	.joystick_p1, .joystick_p2, .service, .turbo, .cheats,
 	.rom_addr(cpu_rom_addr), .rom_req(cpu_rom_req),
 	.rom_dout(cpu_rom_dout), .rom_ack(cpu_rom_ack),
 	.ram_addr(cpu_ram_addr), .ram_req(cpu_ram_req), .ram_write(cpu_ram_write),
@@ -260,6 +263,7 @@ gd_dx101_video #(.AHEAD_RENDER(1'b1)) video
 	.clk, .reset(runtime_reset || sprite_buffer_busy),
 	.ce_pix, .h_count, .v_count,
 	.hblank, .vblank, .raster_active(raster_enable[0]), .video_control,
+	.rotate_180,
 	.rowscroll_override_valid, .rowscroll_override_record,
 	.rowscroll_override_data,
 	.video_x_offset, .video_x_zoom, .video_y_offset, .video_y_zoom,

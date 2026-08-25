@@ -15,8 +15,11 @@ output_files/
 *.smsg
 *.sof
 *.summary
+c5_pin_model_dump.txt
+jtag.cdf
 
 captures/
+analysis/
 roms/
 screenshots/
 

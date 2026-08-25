@@ -12,6 +12,8 @@ module gd_cpu_subsystem
 	input  logic [31:0] joystick_p1,
 	input  logic [31:0] joystick_p2,
 	input  logic        service,
+	input  logic        turbo,
+	input  logic [11:0] cheats,
 
 	output logic [20:0] rom_addr,
 	output logic        rom_req,
@@ -62,6 +64,7 @@ module gd_cpu_subsystem
 // fx68k advances on alternating Phi1/Phi2 enables. 33.333 MHz phase
 // events produce the TMP68301's 16.667 MHz CPU clock from 68.75 MHz.
 localparam logic [31:0] CPU_EVENT_INCREMENT = 32'd2082408386;
+localparam logic [31:0] TURBO_EVENT_INCREMENT = 32'd3123612579;
 logic [31:0] cpu_clock_accumulator;
 logic [32:0] cpu_clock_sum;
 logic        cpu_half_phase;
@@ -69,6 +72,16 @@ logic        cpu_phi1;
 logic        cpu_phi2;
 
 always_comb cpu_clock_sum = {1'b0, cpu_clock_accumulator}
+	+ {1'b0, turbo ? TURBO_EVENT_INCREMENT : CPU_EVENT_INCREMENT};
+
+// TMP68301 timers stay on the board-rate phase stream. Turbo accelerates the
+// 68000 instruction engine only; video IRQ cadence, timer timebases and audio
+// pitch therefore remain faithful to the PCB.
+logic [31:0] timer_clock_accumulator;
+logic [32:0] timer_clock_sum;
+logic        timer_half_phase;
+logic        timer_cpu_ce;
+always_comb timer_clock_sum = {1'b0, timer_clock_accumulator}
 	+ {1'b0, CPU_EVENT_INCREMENT};
 
 always_ff @(posedge clk) begin
@@ -88,6 +101,21 @@ always_ff @(posedge clk) begin
 			if (cpu_half_phase) cpu_phi2 <= 1'b1;
 			else cpu_phi1 <= 1'b1;
 			cpu_half_phase <= ~cpu_half_phase;
+		end
+	end
+end
+
+always_ff @(posedge clk) begin
+	timer_cpu_ce <= 1'b0;
+	if (reset) begin
+		timer_clock_accumulator <= 32'd0;
+		timer_half_phase <= 1'b0;
+	end
+	else begin
+		timer_clock_accumulator <= timer_clock_sum[31:0];
+		if (timer_clock_sum[32]) begin
+			timer_half_phase <= ~timer_half_phase;
+			if (timer_half_phase) timer_cpu_ce <= 1'b1;
 		end
 	end
 end
@@ -178,10 +206,19 @@ always_comb begin
 end
 
 wire [15:0] work_q;
+wire [15:0] work_read_data;
+wire [15:0] work_write_data;
 wire [15:0] work_video_unused;
+gd_work_ram_cheats work_ram_cheats
+(
+	.address(cpu_even_address), .ram_q(work_q),
+	.cpu_write_data(cpu_data_out), .cpu_write_be(cpu_byte_enable),
+	.cheats, .cpu_read_data(work_read_data),
+	.ram_write_data(work_write_data)
+);
 gd_word_ram #(.ADDR_WIDTH(15)) work_ram
 (
-	.clk(clk), .address(cpu_even_address[15:1]), .data(cpu_data_out),
+	.clk(clk), .address(cpu_even_address[15:1]), .data(work_write_data),
 	.byte_enable(cpu_byte_enable), .write(local_write && cs_work), .q(work_q),
 	.video_clk(clk), .video_address(15'd0), .video_q(work_video_unused)
 );
@@ -277,7 +314,7 @@ end
 wire [15:0] tmp_q;
 gd_tmp68301 tmp68301_regs
 (
-	.clk(clk), .reset(reset), .cpu_ce(cpu_phi2), .cs(cs_tmp),
+	.clk(clk), .reset(reset), .cpu_ce(timer_cpu_ce), .cs(cs_tmp),
 	.write(local_write && cs_tmp),
 	.address(cpu_even_address[9:0]), .data(cpu_data_out),
 	.byte_enable(cpu_byte_enable), .q(tmp_q), .ext_irq0(vblank),
@@ -356,7 +393,7 @@ always_ff @(posedge clk) begin
 					else begin
 						if (!mapped_cycle)
 							debug_unmapped_cycles <= debug_unmapped_cycles + 16'd1;
-						if (cs_work) cpu_data_in <= work_q;
+						if (cs_work) cpu_data_in <= work_read_data;
 						else if (cs_aux) cpu_data_in <= aux_q;
 						else if (cs_dsw1) cpu_data_in <= {8'hff, dip_switches[7:0]};
 						else if (cs_dsw2) cpu_data_in <= {8'hff, dip_switches[15:8]};

@@ -9,6 +9,15 @@ $vvp = if ($env:VVP) {
 } else {
     (Get-Command vvp -ErrorAction Stop).Source
 }
+
+$output = Join-Path $PSScriptRoot 'crt_vsize_compile.out'
+& $iverilog -g2012 -s crt_vsize -o $output rtl/crt_vsize.sv
+if ($LASTEXITCODE -ne 0) { throw 'CRT vertical geometry compilation failed' }
+
+$output = Join-Path $PSScriptRoot 'crt_adjust_compile.out'
+& $iverilog -g2012 -s crt_adjust -o $output rtl/crt_adjust.sv
+if ($LASTEXITCODE -ne 0) { throw 'CRT horizontal geometry compilation failed' }
+
 $output = Join-Path $PSScriptRoot 'analog_to_digital.out'
 & $iverilog -g2012 -s tb_gd_analog_to_digital -o $output rtl/gd_analog_to_digital.sv sim/tb_gd_analog_to_digital.sv
 if ($LASTEXITCODE -ne 0) { throw 'Analog input unit-test compilation failed' }
@@ -20,6 +29,12 @@ $output = Join-Path $PSScriptRoot 'ddr_memory.out'
 if ($LASTEXITCODE -ne 0) { throw 'DDR memory unit-test compilation failed' }
 & $vvp $output
 if ($LASTEXITCODE -ne 0) { throw 'DDR memory unit test failed' }
+
+$output = Join-Path $PSScriptRoot 'work_ram_cheats.out'
+& $iverilog -g2012 -s tb_gd_work_ram_cheats -o $output rtl/gd_work_ram_cheats.sv sim/tb_gd_work_ram_cheats.sv
+if ($LASTEXITCODE -ne 0) { throw 'Work-RAM cheat unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'Work-RAM cheat unit test failed' }
 
 $output = Join-Path $PSScriptRoot 'video_timing.out'
 & $iverilog -g2012 -s tb_gd_video_timing -o $output rtl/gd_video_timing.sv sim/tb_gd_video_timing.sv
@@ -44,6 +59,12 @@ $output = Join-Path $PSScriptRoot 'gfx_arbiter.out'
 if ($LASTEXITCODE -ne 0) { throw 'Graphics arbiter unit-test compilation failed' }
 & $vvp $output
 if ($LASTEXITCODE -ne 0) { throw 'Graphics arbiter unit test failed' }
+
+$output = Join-Path $PSScriptRoot 'rom_loader.out'
+& $iverilog -g2012 -s tb_gd_rom_loader -o $output rtl/gd_rom_loader.sv sim/tb_gd_rom_loader.sv
+if ($LASTEXITCODE -ne 0) { throw 'ROM loader unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'ROM loader unit test failed' }
 
 $output = Join-Path $PSScriptRoot 'sdram_dma.out'
 & $iverilog -g2012 -s tb_gd_sdram_dma -o $output rtl/gd_sdram.sv sim/tb_gd_sdram_dma.sv

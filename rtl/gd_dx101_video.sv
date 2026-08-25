@@ -28,6 +28,7 @@ module gd_dx101_video
 	input  logic [14:0] rowscroll_override_record,
 	input  logic [15:0] rowscroll_override_data,
 	input  logic [15:0] video_control,
+	input  logic        rotate_180,
 	input  logic [26:0] video_x_offset,
 	input  logic [26:0] video_x_zoom,
 	input  logic [26:0] video_y_offset,
@@ -97,7 +98,9 @@ wire [8:0] physical_next_line = (v_count == V_TOTAL - 1)
 wire [9:0] recovery_line_sum = {1'b0, v_count} + 10'd12;
 wire [8:0] recovery_render_line = (recovery_line_sum >= V_TOTAL)
 	? (recovery_line_sum - V_TOTAL) : recovery_line_sum[8:0];
-always_comb rowscroll_lookup_line = target_line;
+wire [8:0] logical_target_line = rotate_180 && (target_line < V_ACTIVE)
+	? (V_ACTIVE - 1 - target_line) : target_line;
+always_comb rowscroll_lookup_line = logical_target_line;
 
 function automatic [8:0] line_forward_distance;
 	input [8:0] from_line;
@@ -246,6 +249,7 @@ always_comb begin
 end
 
 logic [8:0] prefetch_x;
+logic [8:0] display_x;
 logic [14:0] scan_index;
 function automatic [8:0] packed_line_address;
 	input [3:0] buffer_number;
@@ -272,9 +276,13 @@ endfunction
 always_comb begin
 	if (h_count >= H_TOTAL - 2) prefetch_x = h_count - (H_TOTAL - 2);
 	else prefetch_x = h_count + 9'd2;
-	line_read_address = packed_line_address(display_bank, prefetch_x[8:3]);
+	if (rotate_180 && (prefetch_x < 9'd304))
+		display_x = 9'd303 - prefetch_x;
+	else
+		display_x = prefetch_x;
+	line_read_address = packed_line_address(display_bank, display_x[8:3]);
 	if (prefetch_x < 9'd304) begin
-		case (prefetch_x[2:0])
+		case (display_x[2:0])
 			3'd0: scan_index = line_read_data[0];
 			3'd1: scan_index = line_read_data[1];
 			3'd2: scan_index = line_read_data[2];
@@ -340,7 +348,7 @@ logic [10:0] color_code;
 logic [63:0] gfx_line;
 logic float_mode;
 logic [6:0] float_x;
-logic [5:0] float_columns_remaining;
+logic [6:0] float_columns_remaining;
 logic [9:0] float_scroll_x;
 logic [8:0] float_source_line;
 logic [4:0] float_page;
@@ -369,8 +377,8 @@ integer calc_tile_y;
 integer calc_tile_address;
 integer calc_dest_x;
 integer calc_screen_x;
+integer calc_zoomed_x;
 integer calc_used_line;
-integer calc_y_base;
 logic [7:0] draw_pen [0:7];
 integer draw_pixel_x [0:7];
 integer draw_calc_column;
@@ -418,6 +426,39 @@ function automatic heat_write_enable;
 	end
 endfunction
 
+// Guardians programs the DX-101's inverted Y zoom as a 16.16 source-line
+// step. Unit zoom is 0x7ff0000 (-1.0); the stage-map screen uses 0x7fe0000
+// (-2.0), so each physical row advances two source rows. Fixed-position
+// headers bypass the global transform in the controller and are handled by
+// the caller.
+function automatic [10:0] global_source_line;
+	input  [8:0] physical_line;
+	input [26:0] y_offset;
+	input [26:0] y_zoom;
+	reg [26:0] offset_phase;
+	reg [11:0] source_sum;
+	begin
+		if (!y_zoom[26]) begin
+			global_source_line = {2'b00, physical_line};
+		end
+		else begin
+			offset_phase = 27'h7ffffff - y_offset;
+			// Guardians uses only the DX-101's exact -1.0 gameplay step and
+			// exact -2.0 stage-map step. Implement those shifts directly so
+			// this visibility test does not put a multiplier on the sprite-
+			// list RAM write-enable path.
+			if (y_zoom == 27'h7fe0000)
+				source_sum = {2'b00, physical_line, 1'b0}
+					+ {1'b0, offset_phase[26:16]};
+			else
+				source_sum = {3'b000, physical_line}
+					+ {1'b0, offset_phase[26:16]};
+			// Match the controller's wrapped 11-bit integer source line.
+			global_source_line = source_sum[10:0];
+		end
+	end
+endfunction
+
 // Exact graphics row for the same normal-sprite tile four physical lines
 // later. This crosses an 8-pixel tile boundary using the descriptor's
 // horizontal size and vertical flip, avoiding speculative sprite-state reads.
@@ -438,13 +479,11 @@ function automatic sprite_intersects_line;
 	integer size_y;
 	integer width;
 	integer used_line;
-	integer y_base;
 	begin
-		y_base = (27'h7ffffff - y_offset) >> 16;
 		if (fh0[14] || !y_zoom[26])
 			used_line = physical_line;
 		else
-			used_line = (physical_line + y_base) & 11'h7ff;
+			used_line = global_source_line(physical_line, y_offset, y_zoom);
 		if (fh3[15]) begin
 			sy = fs1 & 16'h01ff;
 			if (sy & 9'h100) sy = sy - 512;
@@ -476,7 +515,7 @@ endfunction
 
 wire scan_record_visible = sprite_intersects_line(
 	h0, h1, h2, h3, scan_record_q[15:0], scan_record_q[31:16],
-	target_line, video_y_offset, video_y_zoom);
+	logical_target_line, video_y_offset, video_y_zoom);
 wire scan_rowscroll_target = rowscroll_override_valid
 	// Raster IRQ writes happen after the DX-101 has packed the display list into
 	// low sprite RAM. The captured address is therefore the packed destination
@@ -535,6 +574,12 @@ always_comb begin
 			decode_pen(gfx_line, draw_calc_column[2:0]), bpp_mode);
 		draw_pixel_x[draw_calc_column] = tile_screen_x + (flip_x
 			? (7 - draw_calc_column) : draw_calc_column);
+		// The loading/map screen programs +2.0 X zoom, whose reciprocal
+		// output step is 0.5. Header bit 14 is the DX-101 fixed-position
+		// mode and deliberately bypasses this global scaling.
+		if (!h0[14] && (video_x_zoom == 27'h0020000))
+			draw_pixel_x[draw_calc_column] =
+				$signed(draw_pixel_x[draw_calc_column]) >>> 1;
 	end
 end
 
@@ -858,15 +903,15 @@ always_ff @(posedge clk) begin
 			end
 
 			R_SPRITE_PROCESS: begin
-				// Guardians uses the controller's negative unit Y zoom as a
-				// screen flip/offset. Its programmed values transform visible
-				// line Y to source line Y+128. Header bit 14 bypasses the global
-				// transform and uses the physical raster line directly.
-				calc_y_base = (27'h7ffffff - video_y_offset) >> 16;
+				// Inverted Y zoom is a 16.16 physical-to-source step. Gameplay
+				// normally uses -1.0, while the stage-map screen uses -2.0 to
+				// shrink its non-fixed layers by half. Header bit 14 bypasses the
+				// global transform and uses the physical raster line directly.
 				if (h0[14] || !video_y_zoom[26])
-					calc_used_line = target_line;
+					calc_used_line = logical_target_line;
 				else
-					calc_used_line = (target_line + calc_y_base) & 11'h7ff;
+					calc_used_line = global_source_line(logical_target_line,
+						video_y_offset, video_y_zoom);
 				if (h3[15]) begin
 					calc_sy = s1 & 16'h01ff;
 					if (calc_sy & 9'h100) calc_sy = calc_sy - 512;
@@ -899,17 +944,19 @@ always_ff @(posedge clk) begin
 						float_sx <= calc_sx;
 						float_first_column <= calc_dest_x;
 						float_last_column <= calc_dest_x + calc_width * 16 - 1;
-						// Begin at the first tile that can touch the 304-pixel
-						// screen rather than walking all 128 columns. The DX-101
-						// coordinate ring is 1024 pixels and each entry advances 8.
+						// Begin at the first source tile that can touch the
+						// 304-pixel screen. Half-scale mode needs twice the source
+						// width and therefore scans 80 rather than 40 columns.
 						calc_screen_x = h0[14] ? -7
 							: $signed({video_x_offset[26],
-							           video_x_offset[26:16]}) - 7;
+							           video_x_offset[26:16]})
+							  - ((video_x_zoom == 27'h0020000) ? 14 : 7);
 						calc_dest_x = calc_sx + s2[9:0]
 							+ (h1 & 16'h03ff) + 16'h10;
 						calc_tile_x = (calc_screen_x - calc_dest_x) & 10'h3ff;
 						float_x <= ((calc_tile_x + 7) >> 3) & 7'h7f;
-						float_columns_remaining <= 6'd40;
+						float_columns_remaining <= (!h0[14]
+							&& (video_x_zoom == 27'h0020000)) ? 7'd80 : 7'd40;
 						state <= R_FLOAT_SELECT;
 					end
 				end
@@ -978,10 +1025,9 @@ always_ff @(posedge clk) begin
 			end
 
 			R_FLOAT_SELECT: begin
-				// A floating tilemap covers a 1024-pixel circular row, but
-				// only about 40 of its 128 entries can reach a 304-pixel
-				// Guardians scanline. Reject the other entries before using
-				// sprite RAM or graphics bandwidth.
+				// A floating tilemap covers a 1024-pixel circular row. Unit
+				// zoom needs about 40 entries for a 304-pixel scanline; the
+				// loading screen's half-scale mode needs about 80.
 				calc_dest_x = float_sx + float_scroll_x
 					+ (h1 & 16'h03ff) + 16'h10 + float_x * 8;
 				calc_dest_x = ((calc_dest_x + 16'h10) & 10'h3ff) - 16'h10;
@@ -992,15 +1038,18 @@ always_ff @(posedge clk) begin
 					calc_screen_x = calc_screen_x
 						- $signed({video_x_offset[26],
 						           video_x_offset[26:16]});
+				calc_zoomed_x = calc_screen_x;
+				if (!h0[14] && (video_x_zoom == 27'h0020000))
+					calc_zoomed_x = $signed(calc_screen_x) >>> 1;
 				if (!wrapped_span_contains(float_first_column - 8,
 				        (float_last_column - float_first_column + 1) + 8,
 				        calc_dest_x)
-				    || (calc_screen_x < -7) || (calc_screen_x > 303)) begin
-					if (float_columns_remaining == 6'd1)
+				    || (calc_zoomed_x < -7) || (calc_zoomed_x > 303)) begin
+					if (float_columns_remaining == 7'd1)
 						state <= R_NEXT_SPRITE;
 					else begin
 						float_x <= float_x + 7'd1;
-						float_columns_remaining <= float_columns_remaining - 6'd1;
+						float_columns_remaining <= float_columns_remaining - 7'd1;
 					end
 				end
 				else begin
@@ -1063,11 +1112,11 @@ always_ff @(posedge clk) begin
 			end
 			R_GFX_DRAW: begin
 				if (float_mode) begin
-					if (float_columns_remaining == 6'd1)
+					if (float_columns_remaining == 7'd1)
 						state <= R_NEXT_SPRITE;
 					else begin
 						float_x <= float_x + 7'd1;
-						float_columns_remaining <= float_columns_remaining - 6'd1;
+						float_columns_remaining <= float_columns_remaining - 7'd1;
 						state <= R_FLOAT_SELECT;
 					end
 				end

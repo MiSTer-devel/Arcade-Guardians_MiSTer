@@ -1,9 +1,9 @@
 <misterromdescription>
   <name>Guardians / Denjin Makai II</name>
-  <mratimestamp>202608230000</mratimestamp>
+  <mratimestamp>202608240000</mratimestamp>
   <mameversion>0287</mameversion>
   <setname>grdians</setname>
-  <rbf>Guardians</rbf>
+  <rbf>Guardians_20260824</rbf>
   <about author="OpenAI Codex and kandowontu" webpage="https://github.com/kandowontu/Guardians_MiSTer" />
   <buttons names="Attack,Jump,Special,Unused,Start,Coin,Service" default="A,B,X,Y,Start,Select,R" />
   <switches default="ff,ff" base="8">

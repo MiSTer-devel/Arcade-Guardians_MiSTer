@@ -1,11 +1,49 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 - 2026-08-24
+
+- Added an optional 25 MHz Turbo CPU mode (+50%) for extra gameplay processing
+  headroom. Native raster cadence, TMP68301 timer timebases, and X1-010 audio
+  timing remain at PCB speed; Turbo is disabled by default.
+- Added independent horizontal size, horizontal shift, vertical size, and
+  vertical shift controls for analog CRT alignment, with PVM and cabinet
+  vertical-sizing modes. The native output is unchanged when CRT Geometry is
+  off. Vertical sizing spans approximately +/-3.5%, a practical 15-kHz CRT
+  range that avoids consuming the game core's fully allocated M10Ks.
+- Added selectable normal and 180-degree rendering while retaining the native
+  board raster and synchronization.
+- Adapted the GPLv3 CRT output stages from rmonic79's MiSTer-CRT-Adjust, using
+  Guardians' native RGB555 format internally to preserve colors while fitting
+  the DE10-Nano memory budget.
+- Made CRT Geometry a literal native-video bypass when disabled and
+  automatically bypassed it for MiSTer's Scandoubler Fx modes and forced
+  scandoubling. This keeps the scandoubler/HQ2x input uniformly clocked and
+  prevents the displayed frame from freezing when an effect is selected.
+- Added three standard MiSTer OSD cheat pages with twelve independently
+  selectable work-RAM cheats: infinite credits/time and per-player lives,
+  energy, power, invincibility, and special attack. All cheats default off and
+  require no external file or helper.
+- Reduced graphics-ROM loader handshakes by packing four 16-bit words per
+  request. The SDRAM controller issues a real WRITE command for every word
+  under one active row, preserving single-location write-mode correctness and
+  auto-precharging only the final word.
+- Added focused regressions for the full cheat address/byte-lane map, graphics
+  byte packing, consecutive SDRAM write commands, column progression, and
+  final-word auto-precharge.
+- Implemented the DX-101 global half-scale X/Y mode used by the stage map and
+  loading screen. Non-fixed map and preview layers now render at the board's
+  programmed 1:2 scale while fixed-position frame graphics remain native size.
+- Added focused loading-screen regressions for the global source-line step,
+  horizontal pixel-pair scaling, sprite visibility, and fixed-header bypass.
+- Verified the accelerated loader on a DE10-Nano with a cold MRA launch: the
+  original game reported both ROM checksum and RAM access OK, then displayed
+  correctly decoded intro graphics without the former diagnostic grid. The
+  final build also passed loading-screen, intro, and live-gameplay validation.
 
 ## 1.1.1 - 2026-08-23
 
-- Raised the internal system/renderer clock from 62.5 to 75 MHz while
-  preserving the board's exact 6.25 MHz pixel clock with a divide-by-twelve
+- Raised the internal system/renderer clock from 62.5 to 68.75 MHz while
+  preserving the board's exact 6.25 MHz pixel clock with a divide-by-eleven
   enable. Retuned the CPU and X1-010 phase accumulators so game and audio speed
   remain unchanged.
 - Added an open-page graphics DMA path. Consecutive graphics cache misses in
