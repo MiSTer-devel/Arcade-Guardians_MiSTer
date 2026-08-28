@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.1 - 2026-08-28
+
+- Added a mappable Pause controller button. Pause freezes the CPU, TMP68301
+  timers, and X1-010 playback state while preserving live video and OSD access.
+- Expanded horizontal CRT positioning from an 8-pixel range to a 32-pixel
+  range so narrow analog displays can expose the full left edge.
+- Made the native-sync Cabinet vertical-size path the default for reliable CRT
+  lock and retained retimed PVM mode as an explicit wide-lock-monitor option.
+  Corrected the PVM generator to emit the positive sync pulses required by
+  MiSTer's arcade video pipeline.
+- Renamed the Quartus project and release core to `Arcade-Guardians`, added a
+  standard `releases/` directory, and documented pinned upstream provenance for
+  MiSTer-devel review.
+
 ## 1.2.0 - 2026-08-24
 
 - Added an optional 25 MHz Turbo CPU mode (+50%) for extra gameplay processing

@@ -5,4 +5,4 @@ set core_sys_clock [get_clocks {*emu|pll|pll_inst|altera_pll_i|general[1].gpll~P
 
 report_timing -setup -to_clock $core_sys_clock -npaths 10 \
 	-detail full_path -show_routing \
-	-file output_files/Guardians.sys_setup_paths.txt
+	-file output_files/Arcade-Guardians.sys_setup_paths.txt

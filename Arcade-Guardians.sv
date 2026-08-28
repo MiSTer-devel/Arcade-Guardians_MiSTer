@@ -42,10 +42,10 @@ localparam CONF_STR = {
 	"P2,CRT Geometry;",
 	"P2O[7],CRT Geometry,Off,On;",
 	"P2O[11:8],H Size,0,+1,+2,+3,+4,+5,+6,+7,-8,-7,-6,-5,-4,-3,-2,-1;",
-	"P2O[15:12],H Shift,0,+1,+2,+3,+4,+5,+6,+7,-8,-7,-6,-5,-4,-3,-2,-1;",
+	"P2O[43:39],H Shift,0,+2,+4,+6,+8,+10,+12,+14,+16,+18,+20,+22,+24,+26,+28,+30,-32,-30,-28,-26,-24,-22,-20,-18,-16,-14,-12,-10,-8,-6,-4,-2;",
 	"P2O[18:16],V Size,0,+1,+2,+3,-3,-2,-1;",
 	"P2O[23:20],V Shift,0,+1,+2,+3,+4,+5,+6,+7,-8,-7,-6,-5,-4,-3,-2,-1;",
-	"P2O[24],V Size Mode,PVM,Cabinet;",
+	"P2O[24],V Size Mode,Cabinet (Stable),PVM (Retimed);",
 	"P2O[25],Rotation,Normal,180 deg;",
 	"P3,Cheats - General;",
 	"P3O[27],Infinite Credits,Off,On;",
@@ -66,9 +66,9 @@ localparam CONF_STR = {
 	"-;",
 	"T[0],Reset;",
 	"R[0],Reset and close OSD;",
-	"J1,Attack,Jump,Special,-,Start,Coin,Service;",
+	"J1,Attack,Jump,Special,Pause,Start,Coin,Service;",
 	"jn,A,B,X,Y,Start,Select,R;",
-	"v,1.2;",
+	"v,1.2.1;",
 	"V,v",`BUILD_DATE
 };
 
@@ -121,6 +121,13 @@ pll pll
 
 wire cold_reset = ~pll_locked;
 wire reset = RESET | status[0] | buttons[1] | cold_reset;
+
+wire paused;
+gd_pause_toggle pause_control
+(
+	.clk(clk_sys), .reset,
+	.button(joystick_p1[7] | joystick_p2[7]), .paused
+);
 
 logic [15:0] dip_switches = 16'hffff;
 always_ff @(posedge clk_sys) begin
@@ -183,7 +190,7 @@ gd_core core
 (
 	.clk(clk_sys), .cold_reset, .reset,
 	.memory_ready(memory_ready_sys),
-	.diagnostic_grid(1'b0), .service(status[3]), .turbo(status[26]),
+	.diagnostic_grid(1'b0), .service(status[3]), .turbo(status[26]), .pause(paused),
 	.rotate_180(status[25]),
 	.cheats(status[38:27]),
 	.dip_switches, .joystick_p1, .joystick_p2,
@@ -217,7 +224,8 @@ wire crt_geometry = status[7];
 wire crt_geometry_active = crt_geometry && (video_fx == 3'd0)
 	&& !forced_scandoubler;
 wire signed [4:0] crt_hsize = {{1{status[11]}}, status[11:8]};
-wire signed [8:0] crt_hshift = {{5{status[15]}}, status[15:12]};
+wire signed [5:0] crt_hshift_step = {{1{status[43]}}, status[43:39]};
+wire signed [8:0] crt_hshift = $signed(crt_hshift_step) <<< 1;
 wire signed [5:0] crt_vshift = {{2{status[23]}}, status[23:20]};
 wire signed [3:0] crt_vsize_step = (status[18:16] <= 3'd3)
 	? $signed({1'b0, status[18:16]})
@@ -242,9 +250,14 @@ wire crt_vz_ce;
 crt_vsize #(.RING_LINES(22), .LINE_PX(304)) crt_vertical
 (
 	.clk(clk_sys), .pxl_cen(ce_pix), .active(crt_geometry_active),
-	.tube_mode(status[24]), .vsize(crt_vsize),
+	.tube_mode(~status[24]), .vsize(crt_vsize),
 	.r_in(red), .g_in(green), .b_in(blue),
-	.hs_in(hsync), .vs_in(vsync), .de_in(~(hblank | vblank)),
+	// crt_vsize measures and synthesizes positive sync pulses. Guardians'
+	// native raster is negative-sync, so normalize at this boundary and
+	// convert back before feeding crt_adjust. The zero-size bypass therefore
+	// remains electrically identical while nonzero V Size sees the polarity
+	// its measurement and retiming logic expects.
+	.hs_in(~hsync), .vs_in(~vsync), .de_in(~(hblank | vblank)),
 	.vb_in(vblank), .r_out(crt_vz_red), .g_out(crt_vz_green),
 	.b_out(crt_vz_blue), .hs_out(crt_vz_hsync),
 	.vs_out(crt_vz_vsync), .de_out(crt_vz_de),
@@ -287,7 +300,7 @@ crt_adjust #(
 	.clk(clk_sys), .pxl_cen(crt_vz_ce), .pxl2_cen(crt_read_tick),
 	.active(crt_geometry_active), .hsize(crt_hsize), .hoffset(crt_hshift),
 	.voffset(crt_vshift), .r_in(crt_vz_red), .g_in(crt_vz_green),
-	.b_in(crt_vz_blue), .hs_in(crt_vz_hsync), .vs_in(crt_vz_vsync),
+	.b_in(crt_vz_blue), .hs_in(~crt_vz_hsync), .vs_in(~crt_vz_vsync),
 	.hb_in(~crt_vz_de), .vb_in(crt_vz_vblank), .r_out(crt_out_red),
 	.g_out(crt_out_green), .b_out(crt_out_blue),
 	.hs_out(crt_out_hsync), .vs_out(crt_out_vsync),

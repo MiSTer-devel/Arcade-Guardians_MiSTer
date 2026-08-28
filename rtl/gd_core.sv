@@ -11,6 +11,7 @@ module gd_core
 	input  logic        diagnostic_grid,
 	input  logic        service,
 	input  logic        turbo,
+	input  logic        pause,
 	input  logic        rotate_180,
 	input  logic [11:0] cheats,
 	input  logic [15:0] dip_switches,
@@ -177,7 +178,7 @@ assign video_reg_address = 5'd0;
 
 gd_cpu_subsystem cpu
 (
-	.clk, .reset(runtime_reset), .vblank, .raster_irq, .dip_switches,
+	.clk, .reset(runtime_reset), .pause, .vblank, .raster_irq, .dip_switches,
 	.joystick_p1, .joystick_p2, .service, .turbo, .cheats,
 	.rom_addr(cpu_rom_addr), .rom_req(cpu_rom_req),
 	.rom_dout(cpu_rom_dout), .rom_ack(cpu_rom_ack),
@@ -200,7 +201,7 @@ gd_cpu_subsystem cpu
 
 gd_x1_010 sound
 (
-	.clk, .reset(runtime_reset), .cpu_write(x1_write),
+	.clk, .reset(runtime_reset), .pause, .cpu_write(x1_write),
 	.cpu_address(x1_address), .cpu_data(x1_data),
 	.cpu_byte_enable(x1_byte_enable), .cpu_q(x1_q), .sample_banks,
 	.sample_addr(sound_rom_addr), .sample_req(sound_rom_req),

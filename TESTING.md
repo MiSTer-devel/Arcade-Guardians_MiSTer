@@ -1,9 +1,9 @@
-# Guardians MiSTer 1.2 - validation checklist
+# Arcade-Guardians MiSTer 1.2.1 - validation checklist
 
 Extract the archive directly to the root of the MiSTer SD card. It installs:
 
-- `_Arcade/Guardians - Denjin Makai II (P-FG01-1 PCB).mra`
-- `_Arcade/cores/Guardians_20260824.rbf`
+- `_Arcade/Guardians (Denjin Makai II).mra`
+- `_Arcade/cores/Arcade-Guardians_20260828.rbf`
 
 Place a legally obtained, unmodified `grdians.zip` at
 `games/mame/grdians.zip`. No ROM files are included in this archive.
@@ -26,11 +26,12 @@ Please test the following areas:
    wobbling players, enemies, foreground objects, or truncating the image.
 8. Try Turbo CPU both Off and On. Video cadence and audio pitch should remain
    unchanged.
+9. Map Pause in the MiSTer controller menu and confirm that it freezes game
+   logic and sound while leaving the video raster and OSD responsive. Press it
+   again to resume.
 
 When reporting a problem, include the display connection (HDMI/direct analog,
 scaler/scandoubler settings), MiSTer.ini video options, SDRAM module, controller,
 the exact scene, and a short video or screenshot when possible.
 
-Release RBF SHA-256:
-
-`fc239d4881134f726097e73f0f6cd8564c941c9d9588238964f8e2791dca6876`
+Release hashes are recorded in `SHA256SUMS.txt`.

@@ -71,8 +71,8 @@ module crt_vsize #(
     input         [7:0] r_in,
     input         [7:0] g_in,
     input         [7:0] b_in,
-    input               hs_in,
-    input               vs_in,
+    input               hs_in,      // positive HSync pulse
+    input               vs_in,      // positive VSync pulse
     input               de_in,      // active pixels (combined DE)
     input               vb_in,      // TRUE vertical blank (for bypass passthrough)
 
@@ -715,6 +715,8 @@ module crt_vsize #(
         end else if (engine_on) begin
             // PVM: retimed line structure, pixels on the p_nat CE grid
             ce_out <= out_running && (o_ce_cnt == 0);
+            // The retimer synthesizes positive sync pulses. A core with
+            // negative native sync normalizes at this module's boundary.
             hs_out <= out_running && (o_cline <= {10'd0, hs_w_out});
             vs_out <= o_vs;
             vb_out <= o_vb;

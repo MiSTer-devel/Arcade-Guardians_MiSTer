@@ -1,6 +1,6 @@
-# Guardians / Denjin Makai II for MiSTer
+# Arcade: Guardians / Denjin Makai II for MiSTer
 
-Version 1.2 is a native FPGA implementation of
+Version 1.2.1 is a native FPGA implementation of
 Winkysoft's 1995 arcade game,
 licensed to Banpresto,
 *Guardians / Denjin Makai II* for the MiSTer DE10-Nano platform.
@@ -11,7 +11,7 @@ copyrighted game ROMs are included in this repository or its releases.
 
 ## Install
 
-1. Copy `Guardians_20260823.rbf` to `/media/fat/_Arcade/cores/`.
+1. Copy `Arcade-Guardians_20260828.rbf` to `/media/fat/_Arcade/cores/`.
 2. Copy `Guardians (Denjin Makai II).mra` to `/media/fat/_Arcade/`.
 3. Put a legally obtained, unmodified `grdians.zip` in
    `/media/fat/games/mame/`.
@@ -29,6 +29,7 @@ The default mappings are:
 | Attack | A |
 | Jump | B |
 | Special | X |
+| Pause | Y |
 | Start | Start |
 | Coin | Select |
 | Service | R |
@@ -37,6 +38,9 @@ Player 1 and Player 2 controls are supported. The core OSD also exposes the
 game's DIP switches and a **Test / service mode** switch. The MRA's original
 Service Mode DIP remains available as well. Directional input accepts both the
 mapped D-pad and each player's left analog stick, with a signed dead zone.
+The mappable **Pause** control freezes the CPU, board timers, and X1-010 sound
+state while keeping the video raster and MiSTer OSD alive. Press Pause again
+to resume exactly where the game stopped.
 
 The **Scandoubler Fx** menu leaves the original 15-kHz analog RGB timing intact
 when set to **None**. MiSTer's `forced_scandoubler=1` setting and the menu's
@@ -45,12 +49,15 @@ Geometry is automatically bypassed while one of these digital line effects or
 forced scandoubling is active so the MiSTer scandoubler always receives the
 native uniform pixel stream.
 
-The **CRT Geometry** OSD page provides independent **H Size**, **H Shift**,
+The **CRT Geometry** OSD page provides independent **H Size**, **H Shift**
+(up to 32 pixels in either direction),
 **V Size**, and **V Shift** controls, plus normal/180-degree rotation. All
 geometry is disabled by default, so the native raster is unchanged unless the
-option is explicitly enabled. PVM mode retimes the line cadence for unique-line
-vertical sizing; Cabinet mode retains native sync timing and uses a
-photometric vertical resize for arcade chassis with a narrower lock range.
+option is explicitly enabled. Cabinet mode is the default and retains native
+sync timing while using a photometric vertical resize for broad CRT
+compatibility. The optional PVM mode retimes the line cadence for unique-line
+vertical sizing and is intended only for monitors with a sufficiently wide
+horizontal-lock range.
 The vertical range is approximately +/-3.5%, deliberately kept within a useful
 15-kHz adjustment envelope while fitting beside the core's full M10K usage.
 
@@ -101,11 +108,12 @@ The release was built with Quartus Prime Lite 17.0 for the Cyclone V
 `5CSEBA6U23I7`:
 
 ```powershell
-quartus_sh --flow compile Guardians
+quartus_sh --flow compile Arcade-Guardians
 ```
 
-The 1.2 build closes timing with zero violated setup or hold paths; its worst
-reported setup slack is +0.845 ns.
+The 1.2.1 build closes setup and hold timing with no violations. Overall worst
+setup slack is +0.424 ns, worst hold slack is +0.242 ns, and the dedicated
+68.75-MHz core-clock report has +1.273 ns worst setup slack.
 
 ## Tests
 
@@ -128,7 +136,7 @@ The raster tests also cover ordinary line matches, held-line re-entry, and
 rejection of re-arm writes for future lines. Renderer checks also cover the
 normal and 180-degree coordinate origins without altering native sync timing.
 
-Version 1.2 was verified on a DE10-Nano with the MRA and an unmodified
+Version 1.2.1 was verified on a DE10-Nano with the MRA and an unmodified
 ROM set. Hardware validation included a cold MRA boot, successful ROM checksum
 and RAM-access self-tests, correct intro graphics after four-word SDRAM loading,
 the correctly scaled stage-map/loading screen, and the Stage 1 post-explosion
@@ -144,4 +152,13 @@ tools are excluded.
 
 Core RTL is distributed under GPL-3.0-or-later. Bundled upstream components keep
 their original notices and terms. See [`CREDITS.md`](CREDITS.md) and
-[`LICENSE`](LICENSE).
+[`UPSTREAM.md`](UPSTREAM.md) for exact source provenance, and [`LICENSE`](LICENSE).
+
+## MiSTer-devel handoff
+
+The repository follows the MiSTer arcade-core convention: the repository and
+Quartus project use the `Arcade-Guardians` name, while `releases/` contains the
+dated RBF and its matching MRA. The MRA names the RBF without an extension, so
+update scripts may install newer dated builds without changing the Arcade menu
+entry. Build outputs and game ROMs are deliberately excluded from version
+control.

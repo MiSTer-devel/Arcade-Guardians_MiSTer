@@ -1,10 +1,19 @@
-# Guardians MiSTer 1.2
+# Arcade-Guardians MiSTer 1.2.1
 
 Native MiSTer FPGA core for Winkysoft's 1995 arcade game
 *Guardians / Denjin Makai II*, licensed to Banpresto.
 
 Highlights:
 
+- Added a mappable controller Pause button, assigned to Y by default. Pause
+  freezes the CPU, TMP68301 timers, and X1-010 playback state while retaining
+  a live video raster and MiSTer OSD access.
+- Expanded horizontal CRT positioning to a 32-pixel range so narrow analog
+  displays can reveal and center the full picture.
+- Made native-sync Cabinet vertical sizing the default for reliable CRT lock.
+  Retimed PVM sizing remains available for monitors with a sufficiently wide
+  horizontal-lock range and now emits the polarity expected by MiSTer's video
+  pipeline.
 - Confined Stage 1's heat/rowscroll effect to its floating background layer;
   foreground players, enemies, and objects no longer wobble over the affected
   region.
@@ -28,10 +37,14 @@ Highlights:
 - Removed the diagnostic loading grid. No Linux helper, downloader, external
   cheat file, modified ROM, or preprocessing script is required.
 - Passed the focused RTL regression suite and a clean Quartus Prime Lite 17.0
-  build with zero timing violations and +0.845 ns worst setup slack.
+  build with zero timing violations: +0.424 ns overall worst setup slack,
+  +0.242 ns worst hold slack, and +1.273 ns worst setup slack in the dedicated
+  68.75-MHz core-clock report.
 - Verified the exact release RBF on a DE10-Nano with a cold MRA boot. The
   original game reported ROM checksum and RAM access OK before displaying
   correctly decoded intro, loading-screen, and live-gameplay graphics.
+- Normalized the repository, Quartus project, and dated release artifacts to
+  the standard `Arcade-Guardians` MiSTer-devel naming and folder layout.
 
 ## Credits
 

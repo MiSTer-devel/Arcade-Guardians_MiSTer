@@ -18,6 +18,12 @@ $output = Join-Path $PSScriptRoot 'crt_adjust_compile.out'
 & $iverilog -g2012 -s crt_adjust -o $output rtl/crt_adjust.sv
 if ($LASTEXITCODE -ne 0) { throw 'CRT horizontal geometry compilation failed' }
 
+$output = Join-Path $PSScriptRoot 'pause_toggle.out'
+& $iverilog -g2012 -s tb_gd_pause_toggle -o $output rtl/gd_pause_toggle.sv sim/tb_gd_pause_toggle.sv
+if ($LASTEXITCODE -ne 0) { throw 'Pause unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'Pause unit test failed' }
+
 $output = Join-Path $PSScriptRoot 'analog_to_digital.out'
 & $iverilog -g2012 -s tb_gd_analog_to_digital -o $output rtl/gd_analog_to_digital.sv sim/tb_gd_analog_to_digital.sv
 if ($LASTEXITCODE -ne 0) { throw 'Analog input unit-test compilation failed' }

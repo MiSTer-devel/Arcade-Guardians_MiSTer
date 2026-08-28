@@ -7,6 +7,7 @@ module gd_x1_010
 (
 	input  logic        clk,
 	input  logic        reset,
+	input  logic        pause,
 	input  logic        cpu_write,
 	input  logic [12:0] cpu_address,
 	input  logic [15:0] cpu_data,
@@ -102,7 +103,6 @@ endfunction
 
 integer n;
 always_ff @(posedge clk) begin
-	sample_accumulator <= sample_sum[31:0];
 	if (reset) begin
 		sample_accumulator <= 32'd0;
 		state <= S_IDLE;
@@ -132,7 +132,13 @@ always_ff @(posedge clk) begin
 			channel_reg[cpu_address[6:0]] <= cpu_data[7:0];
 		end
 
-		case (state)
+		if (pause) begin
+			audio_left <= 16'sd0;
+			audio_right <= 16'sd0;
+		end
+		else begin
+			sample_accumulator <= sample_sum[31:0];
+			case (state)
 			S_IDLE: if (sample_tick) begin
 				voice <= 5'd0;
 				mix_left <= 20'sd0;
@@ -212,8 +218,9 @@ always_ff @(posedge clk) begin
 				audio_right <= saturate16(mix_right);
 				state <= S_IDLE;
 			end
-			default: state <= S_IDLE;
-		endcase
+				default: state <= S_IDLE;
+			endcase
+		end
 	end
 end
 

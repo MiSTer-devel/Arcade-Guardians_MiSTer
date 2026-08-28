@@ -6,6 +6,7 @@ module gd_cpu_subsystem
 (
 	input  logic        clk,
 	input  logic        reset,
+	input  logic        pause,
 	input  logic        vblank,
 	input  logic        raster_irq,
 	input  logic [15:0] dip_switches,
@@ -91,7 +92,7 @@ always_ff @(posedge clk) begin
 		cpu_clock_accumulator <= 32'd0;
 		cpu_half_phase <= 1'b0;
 	end
-	else begin
+	else if (!pause) begin
 		cpu_clock_accumulator <= cpu_clock_sum[31:0];
 		// DX-101 list buffering is a bus-master transaction. Keep the 68000
 		// stopped until the referenced records have been packed; otherwise a
@@ -111,7 +112,7 @@ always_ff @(posedge clk) begin
 		timer_clock_accumulator <= 32'd0;
 		timer_half_phase <= 1'b0;
 	end
-	else begin
+	else if (!pause) begin
 		timer_clock_accumulator <= timer_clock_sum[31:0];
 		if (timer_clock_sum[32]) begin
 			timer_half_phase <= ~timer_half_phase;
