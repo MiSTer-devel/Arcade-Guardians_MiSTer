@@ -47,22 +47,8 @@ localparam CONF_STR = {
 	"P2O[23:20],V Shift,0,+1,+2,+3,+4,+5,+6,+7,-8,-7,-6,-5,-4,-3,-2,-1;",
 	"P2O[24],V Size Mode,Cabinet (Stable),PVM (Retimed);",
 	"P2O[25],Rotation,Normal,180 deg;",
-	"P3,Cheats - General;",
-	"P3O[27],Infinite Credits,Off,On;",
-	"P3O[28],Infinite Time,Off,On;",
-	"P4,Cheats - Player 1;",
-	"P4O[29],Infinite Lives,Off,On;",
-	"P4O[30],Infinite Energy,Off,On;",
-	"P4O[31],Infinite Power,Off,On;",
-	"P4O[32],Invincibility,Off,On;",
-	"P4O[33],Always Special,Off,On;",
-	"P5,Cheats - Player 2;",
-	"P5O[34],Infinite Lives,Off,On;",
-	"P5O[35],Infinite Energy,Off,On;",
-	"P5O[36],Infinite Power,Off,On;",
-	"P5O[37],Invincibility,Off,On;",
-	"P5O[38],Always Special,Off,On;",
 	"DIP;",
+	"C,Cheats;",
 	"-;",
 	"T[0],Reset;",
 	"R[0],Reset and close OSD;",
@@ -121,6 +107,21 @@ pll pll
 
 wire cold_reset = ~pll_locked;
 wire reset = RESET | status[0] | buttons[1] | cold_reset;
+
+// MiSTer assembles the enabled <cheat> entries from the MRA and downloads
+// each 16-byte code on ioctl index 255. Keep the loader outside the game-reset
+// domain so a warm reset does not silently discard the user's selections.
+logic [128:0] cheat_code = '0;
+wire cheat_download = ioctl_download && (ioctl_index == 16'd255);
+wire cheat_reset = cold_reset
+	|| (cheat_download && ioctl_wr && (ioctl_addr == 27'd0));
+always_ff @(posedge clk_sys) begin
+	cheat_code[128] <= 1'b0;
+	if (cheat_download && ioctl_wr) begin
+		cheat_code[127:0] <= {cheat_code[119:0], ioctl_dout};
+		cheat_code[128] <= &ioctl_addr[3:0];
+	end
+end
 
 wire paused;
 gd_pause_toggle pause_control
@@ -192,7 +193,7 @@ gd_core core
 	.memory_ready(memory_ready_sys),
 	.diagnostic_grid(1'b0), .service(status[3]), .turbo(status[26]), .pause(paused),
 	.rotate_180(status[25]),
-	.cheats(status[38:27]),
+	.cheat_reset, .cheat_code,
 	.dip_switches, .joystick_p1, .joystick_p2,
 	.rom_downloading(ioctl_download && (ioctl_index == 16'd0)),
 	.rom_wr(ioctl_wr && (ioctl_index == 16'd0)),

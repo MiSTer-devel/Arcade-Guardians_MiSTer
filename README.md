@@ -11,7 +11,7 @@ copyrighted game ROMs are included in this repository or its releases.
 
 ## Install
 
-1. Copy `Arcade-Guardians_20260828.rbf` to `/media/fat/_Arcade/cores/`.
+1. Copy `Arcade-Guardians.rbf` to `/media/fat/_Arcade/cores/`.
 2. Copy `Guardians (Denjin Makai II).mra` to `/media/fat/_Arcade/`.
 3. Put a legally obtained, unmodified `grdians.zip` in
    `/media/fat/games/mame/`.
@@ -66,12 +66,13 @@ to reduce computation-driven slowdown. Raster timing, hardware timers, video,
 and X1-010 audio remain at PCB speed, so Turbo adds processing headroom rather
 than globally fast-forwarding the game. Turbo is off by default.
 
-The ordinary MiSTer OSD also includes three **Cheats** pages. General options
-provide infinite credits and time; separate Player 1 and Player 2 pages provide
-infinite lives, energy, power, invincibility, and an always-available special
-attack. Every cheat is off by default and is implemented inside the FPGA by
-clamping the documented work-RAM value on CPU reads and writes. No external
-cheat file, alternate ROM, downloader, or helper script is required.
+The ordinary MiSTer OSD includes a standard **Cheats** menu populated from the
+MRA's `<cheats>` block. It provides infinite credits and time plus per-player
+lives, energy, power, invincibility, and an always-available special attack.
+Every cheat is off by default. MiSTer downloads only the selected 16-byte codes
+to a generic FPGA read-override engine, so disabling a cheat immediately
+restores the underlying ROM or RAM value. No external cheat file, alternate
+ROM, downloader, or helper script is required.
 
 ## Implemented hardware
 
@@ -111,9 +112,10 @@ The release was built with Quartus Prime Lite 17.0 for the Cyclone V
 quartus_sh --flow compile Arcade-Guardians
 ```
 
-The 1.2.1 build closes setup and hold timing with no violations. Overall worst
-setup slack is +0.424 ns, worst hold slack is +0.242 ns, and the dedicated
-68.75-MHz core-clock report has +1.273 ns worst setup slack.
+The replacement 1.2.1 build closes every analyzed timing class with no
+violations. Overall worst setup slack is +0.497 ns, worst hold slack is
++0.194 ns, worst recovery slack is +2.956 ns, and worst removal slack is
++0.760 ns.
 
 ## Tests
 
@@ -127,7 +129,8 @@ Set `IVERILOG` and `VVP` to full executable paths if they are not on `PATH`.
 The suite covers CRT geometry syntax, analog-stick conversion, video timing,
 DDR access, registered
 SDRAM DMA capture, four-command loader writes, graphics-stream packing,
-work-RAM cheat clamps, graphics arbitration, DX-101 rendering, loading-screen
+MRA cheat-code syntax and big-endian CPU byte lanes, graphics arbitration,
+DX-101 rendering, loading-screen
 global zoom and fixed-position bypass, sprite-list
 buffering, native raster/prefetch wrap, 9-bit sprite and floating-layer Y
 wrapping, per-line rowscroll replay, circular object spans, raster look-ahead
@@ -136,12 +139,13 @@ The raster tests also cover ordinary line matches, held-line re-entry, and
 rejection of re-arm writes for future lines. Renderer checks also cover the
 normal and 180-degree coordinate origins without altering native sync timing.
 
-Version 1.2.1 was verified on a DE10-Nano with the MRA and an unmodified
-ROM set. Hardware validation included a cold MRA boot, successful ROM checksum
-and RAM-access self-tests, correct intro graphics after four-word SDRAM loading,
-the correctly scaled stage-map/loading screen, and the Stage 1 post-explosion
-sequence. The renderer preserves the rowscrolled background effect without
-distorting foreground actors or truncating the upper background.
+The game hardware path was verified on a DE10-Nano with the MRA and an
+unmodified ROM set. Validation included a cold MRA boot, successful ROM
+checksum and RAM-access self-tests, correct intro graphics after four-word
+SDRAM loading, the correctly scaled stage-map/loading screen, and the Stage 1
+post-explosion sequence. The replacement build adds the MRA cheat interface;
+its loader, code matching, big-endian byte lanes, and MRA format are covered by
+focused simulation and a clean full Quartus build.
 
 ## Source and licensing
 
@@ -156,9 +160,9 @@ their original notices and terms. See [`CREDITS.md`](CREDITS.md) and
 
 ## MiSTer-devel handoff
 
-The repository follows the MiSTer arcade-core convention: the repository and
+The repository follows the MiSTer arcade-core layout: the repository and
 Quartus project use the `Arcade-Guardians` name, while `releases/` contains the
-dated RBF and its matching MRA. The MRA names the RBF without an extension, so
-update scripts may install newer dated builds without changing the Arcade menu
-entry. Build outputs and game ROMs are deliberately excluded from version
-control.
+fixed-name `Arcade-Guardians.rbf` and its matching
+`Guardians (Denjin Makai II).mra`. The MRA names the RBF without an extension.
+Build databases, game ROMs, local packages, and diagnostic artifacts are
+deliberately excluded from version control.

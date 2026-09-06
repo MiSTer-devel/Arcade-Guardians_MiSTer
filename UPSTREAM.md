@@ -10,10 +10,12 @@ The repository contains no game ROM data.
 - Initial import: 2026-08-09
 - License: GPL-3.0-or-later and per-file notices
 
-The `sys/` directory is a vendored MiSTer framework snapshot. Local changes
-adapt the framework to this arcade board, Quartus Prime Lite 17.0, analog video,
-and the core's video pipeline. Individual source headers retain their original
-copyright and license notices.
+The `sys/` directory is a vendored MiSTer framework snapshot. It matches the
+recorded Template commit except for a five-line `sys/arcade_video.v` tie-off of
+the optional `HDMI_FREEZE` interface in the legacy wrapper; the active core
+does not use that wrapper's freeze engine. Core-specific video, analog, and CRT
+geometry work remains outside the framework snapshot. Individual source
+headers retain their original copyright and license notices.
 
 ## fx68k processor core
 
@@ -58,9 +60,14 @@ known to be incomplete.
 - Source: `https://www.mamecheat.co.uk/`
 - Collection: Pugsy's MAME Cheat Collection
 - Guardians definitions credited to: pasky13
+- Engine model: `https://github.com/MiSTer-devel/Arcade-IremM92_MiSTer`
+- Upstream engine author: Martin Donlon, based on handling by Kitrinx
+- Upstream engine license: GPL-2.0-or-later
 
-Only the documented work-RAM addresses and values are expressed in the core;
-the external cheat engine and XML are not included.
+Only the documented Guardians addresses and values are expressed in the MRA;
+the external Pugsy XML is not included. The local
+`rtl/gd_mra_cheat_engine.sv` adapts the upstream MRA-code storage and matching
+model for a 68000 big-endian bus and is distributed under GPL-3.0-or-later.
 
 ## Generated FPGA IP
 

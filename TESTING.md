@@ -3,7 +3,7 @@
 Extract the archive directly to the root of the MiSTer SD card. It installs:
 
 - `_Arcade/Guardians (Denjin Makai II).mra`
-- `_Arcade/cores/Arcade-Guardians_20260828.rbf`
+- `_Arcade/cores/Arcade-Guardians.rbf`
 
 Place a legally obtained, unmodified `grdians.zip` at
 `games/mame/grdians.zip`. No ROM files are included in this archive.
@@ -14,8 +14,9 @@ Please test the following areas:
    ROM is sent.
 2. Confirm the game's startup self-check reports `ROM CHECK SUM..OK` and
    `RAM ACCESS..OK`.
-3. Open the MiSTer OSD and check the General, Player 1, and Player 2 cheat
-   pages. Cheats default to Off. Try each option independently.
+3. After the startup self-check completes, open the MiSTer OSD's **Cheats**
+   menu. Cheats default to Off. Try each option independently, then disable it
+   and confirm normal behavior resumes.
 4. Exercise Start, Coin, Service, both players, and analog-stick directions.
 5. Check native output, forced scandoubling, HQ2x/scanline effects, and any
    analog video chain available to you. Scandoubler effects must not freeze.

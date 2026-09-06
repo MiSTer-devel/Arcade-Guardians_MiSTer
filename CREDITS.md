@@ -54,11 +54,17 @@ hardware.
 
 ## Cheat definitions
 
-The optional work-RAM cheats use address/value definitions from
+The optional cheats use address/value definitions from
 [Pugsy's MAME Cheat Collection](https://www.mamecheat.co.uk/). Its Guardians
 entry credits the game-specific definitions used here to pasky13. The public
-XML was used as a behavioral reference; it is not bundled, and no MAME cheat
-engine code is copied into the FPGA core.
+XML was used as a behavioral reference and is not bundled.
+
+The standard MRA-code storage and matching model in
+[`rtl/gd_mra_cheat_engine.sv`](rtl/gd_mra_cheat_engine.sv) is adapted from
+Martin Donlon's GPL-2.0-or-later `cheatengine_32_16` in the
+[MiSTer Irem M92 core](https://github.com/MiSTer-devel/Arcade-IremM92_MiSTer),
+which credits Kitrinx for the original cheat-code handling. Guardians adds the
+big-endian byte and long-word lane mapping required by its TMP68301/68000 bus.
 
 ## Generated FPGA IP
 

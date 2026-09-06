@@ -13,7 +13,8 @@ module gd_core
 	input  logic        turbo,
 	input  logic        pause,
 	input  logic        rotate_180,
-	input  logic [11:0] cheats,
+	input  logic        cheat_reset,
+	input  logic [128:0] cheat_code,
 	input  logic [15:0] dip_switches,
 	input  logic [31:0] joystick_p1,
 	input  logic [31:0] joystick_p2,
@@ -179,7 +180,8 @@ assign video_reg_address = 5'd0;
 gd_cpu_subsystem cpu
 (
 	.clk, .reset(runtime_reset), .pause, .vblank, .raster_irq, .dip_switches,
-	.joystick_p1, .joystick_p2, .service, .turbo, .cheats,
+	.joystick_p1, .joystick_p2, .service, .turbo,
+	.cheat_reset, .cheat_code,
 	.rom_addr(cpu_rom_addr), .rom_req(cpu_rom_req),
 	.rom_dout(cpu_rom_dout), .rom_ack(cpu_rom_ack),
 	.ram_addr(cpu_ram_addr), .ram_req(cpu_ram_req), .ram_write(cpu_ram_write),

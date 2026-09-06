@@ -25,9 +25,9 @@ Highlights:
   for reliable HDMI and analog/scaler-backed output.
 - Added optional horizontal/vertical size and position controls, PVM/cabinet
   vertical-sizing modes, 180-degree rotation, and a +50% CPU Turbo option.
-- Added three standard MiSTer OSD cheat pages. General cheats provide infinite
-  credits and time; Player 1 and Player 2 each have independently selectable
-  lives, energy, power, invincibility, and always-special options.
+- Moved all twelve cheats into the MRA's standard `<cheats>` block. MiSTer now
+  supplies selected 16-byte codes to a generic FPGA read-override engine with
+  68000 big-endian byte, word, and long-word handling.
 - Accelerated direct MRA loading by packing four graphics words per handshake.
   The SDRAM controller issues four valid WRITE commands under one active row
   and auto-precharges only the final word.
@@ -37,14 +37,15 @@ Highlights:
 - Removed the diagnostic loading grid. No Linux helper, downloader, external
   cheat file, modified ROM, or preprocessing script is required.
 - Passed the focused RTL regression suite and a clean Quartus Prime Lite 17.0
-  build with zero timing violations: +0.424 ns overall worst setup slack,
-  +0.242 ns worst hold slack, and +1.273 ns worst setup slack in the dedicated
-  68.75-MHz core-clock report.
-- Verified the exact release RBF on a DE10-Nano with a cold MRA boot. The
-  original game reported ROM checksum and RAM access OK before displaying
-  correctly decoded intro, loading-screen, and live-gameplay graphics.
-- Normalized the repository, Quartus project, and dated release artifacts to
-  the standard `Arcade-Guardians` MiSTer-devel naming and folder layout.
+  build with zero timing violations: +0.497 ns overall worst setup slack,
+  +0.194 ns worst hold slack, +2.956 ns recovery slack, and +0.760 ns removal
+  slack.
+- The game path was verified on a DE10-Nano with a cold MRA boot: the original
+  game reported ROM checksum and RAM access OK before displaying correctly
+  decoded intro, loading-screen, and live-gameplay graphics. The replacement
+  MRA cheat loader and matching engine add focused simulation coverage.
+- Normalized the repository, Quartus project, and fixed-name release artifacts
+  to the `Arcade-Guardians` MiSTer-devel folder layout.
 
 ## Credits
 
@@ -59,6 +60,8 @@ Highlights:
 - MAME hardware-documentation references: Luca Elia, David Haywood, Manbow-J,
   and Olivier Galibert
 - Cheat address/value definitions: pasky13 via Pugsy's MAME Cheat Collection
+- MRA cheat-engine model: Martin Donlon and Kitrinx; adapted for the Guardians
+  68000 bus by OpenAI Codex
 
 The modeled devices are the Toshiba TMP68301, NEC DX-101 / Allumer X1-020,
 and Seta X1-010. Intel/Altera-generated PLL IP retains its generated notices.

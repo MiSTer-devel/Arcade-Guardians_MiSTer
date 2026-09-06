@@ -36,11 +36,14 @@ if ($LASTEXITCODE -ne 0) { throw 'DDR memory unit-test compilation failed' }
 & $vvp $output
 if ($LASTEXITCODE -ne 0) { throw 'DDR memory unit test failed' }
 
-$output = Join-Path $PSScriptRoot 'work_ram_cheats.out'
-& $iverilog -g2012 -s tb_gd_work_ram_cheats -o $output rtl/gd_work_ram_cheats.sv sim/tb_gd_work_ram_cheats.sv
-if ($LASTEXITCODE -ne 0) { throw 'Work-RAM cheat unit-test compilation failed' }
+$output = Join-Path $PSScriptRoot 'mra_cheat_engine.out'
+& $iverilog -g2012 -s tb_gd_mra_cheat_engine -o $output rtl/gd_mra_cheat_engine.sv sim/tb_gd_mra_cheat_engine.sv
+if ($LASTEXITCODE -ne 0) { throw 'MRA cheat-engine unit-test compilation failed' }
 & $vvp $output
-if ($LASTEXITCODE -ne 0) { throw 'Work-RAM cheat unit test failed' }
+if ($LASTEXITCODE -ne 0) { throw 'MRA cheat-engine unit test failed' }
+
+& (Join-Path $PSScriptRoot 'check_mra_cheats.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'MRA cheat-definition check failed' }
 
 $output = Join-Path $PSScriptRoot 'video_timing.out'
 & $iverilog -g2012 -s tb_gd_video_timing -o $output rtl/gd_video_timing.sv sim/tb_gd_video_timing.sv

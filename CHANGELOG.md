@@ -1,6 +1,14 @@
 # Changelog
 
-## 1.2.1 - 2026-08-28
+## 1.2.1 - 2026-09-06
+
+- Moved all twelve optional cheats from fixed `CONF_STR` status bits into the
+  MRA's standard `<cheats>` block and replaced the game-specific work-RAM
+  clamps with a generic MiSTer 16-byte read-override engine.
+- Added 68000 big-endian byte/word/long-word handling, compare codes and
+  replace/OR/AND methods, with focused engine and MRA-format regressions.
+- Standardized distribution artifacts on the fixed filenames
+  `Arcade-Guardians.rbf` and `Guardians (Denjin Makai II).mra`.
 
 - Added a mappable Pause controller button. Pause freezes the CPU, TMP68301
   timers, and X1-010 playback state while preserving live video and OSD access.

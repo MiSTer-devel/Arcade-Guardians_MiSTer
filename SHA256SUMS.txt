@@ -1,2 +1,3 @@
-b26ad81268ddda5cebba96a5c5a31b1ecdede0cb84af3f415c008f18262542f6  releases/Arcade-Guardians_20260828.rbf
-90067022f18c81876f794d7f156e31308f600a898893dff6e696efb4ac86f646  releases/Guardians (Denjin Makai II).mra
+20e6b5bf0c8f276e31667e7abdf6201d772cabfea90b64e2a2f3ff74434145f5  Arcade-Guardians.rbf
+c47e0c8ef294f23e40d348d7dbc73615132e70862ad5feba45c2c6342da0883c  Guardians (Denjin Makai II).mra
+d60477e7541f68a4747c380c150e612791d88283f0387af4900b365590172087  Arcade-Guardians_MiSTer_v1.2.1.zip

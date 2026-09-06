@@ -14,7 +14,8 @@ module gd_cpu_subsystem
 	input  logic [31:0] joystick_p2,
 	input  logic        service,
 	input  logic        turbo,
-	input  logic [11:0] cheats,
+	input  logic        cheat_reset,
+	input  logic [128:0] cheat_code,
 
 	output logic [20:0] rom_addr,
 	output logic        rom_req,
@@ -207,19 +208,10 @@ always_comb begin
 end
 
 wire [15:0] work_q;
-wire [15:0] work_read_data;
-wire [15:0] work_write_data;
 wire [15:0] work_video_unused;
-gd_work_ram_cheats work_ram_cheats
-(
-	.address(cpu_even_address), .ram_q(work_q),
-	.cpu_write_data(cpu_data_out), .cpu_write_be(cpu_byte_enable),
-	.cheats, .cpu_read_data(work_read_data),
-	.ram_write_data(work_write_data)
-);
 gd_word_ram #(.ADDR_WIDTH(15)) work_ram
 (
-	.clk(clk), .address(cpu_even_address[15:1]), .data(work_write_data),
+	.clk(clk), .address(cpu_even_address[15:1]), .data(cpu_data_out),
 	.byte_enable(cpu_byte_enable), .write(local_write && cs_work), .q(work_q),
 	.video_clk(clk), .video_address(15'd0), .video_q(work_video_unused)
 );
@@ -289,6 +281,37 @@ always_comb begin
 	raster_position = video_registers[31];
 end
 wire [15:0] cpu_video_reg_q = video_registers[cpu_even_address[5:1]];
+
+// MRA cheats are read overrides. A single engine covers program ROM and work
+// RAM; all device, palette and sprite reads retain their original direct path.
+// Disabling a cheat leaves the underlying board state untouched.
+logic [15:0] raw_cpu_read_data;
+wire [15:0] cheat_cpu_read_data;
+wire [15:0] cheat_source_data = cs_program ? rom_dout : work_q;
+wire cheat_target = cs_program || cs_work;
+always_comb begin
+	if (cheat_target) raw_cpu_read_data = cheat_cpu_read_data;
+	else if (cs_aux) raw_cpu_read_data = aux_q;
+	else if (cs_dsw1) raw_cpu_read_data = {8'hff, dip_switches[7:0]};
+	else if (cs_dsw2) raw_cpu_read_data = {8'hff, dip_switches[15:8]};
+	else if (cs_p1) raw_cpu_read_data = p1_port;
+	else if (cs_p2) raw_cpu_read_data = p2_port;
+	else if (cs_system) raw_cpu_read_data = system_port;
+	else if (cs_x1) raw_cpu_read_data = x1_q;
+	else if (cs_sprite) raw_cpu_read_data = sprite_q;
+	else if (cs_palette) raw_cpu_read_data = palette_q;
+	else if (cs_extra_palette) raw_cpu_read_data = ram_dout;
+	else if (cs_video_regs) raw_cpu_read_data = cpu_video_reg_q;
+	else if (cs_tmp) raw_cpu_read_data = tmp_q;
+	else raw_cpu_read_data = 16'hffff;
+end
+
+gd_mra_cheat_engine #(.ADDR_WIDTH(24), .MAX_CODES(16)) mra_cheats
+(
+	.clk, .reset(cheat_reset), .enable(1'b1), .code(cheat_code),
+	.available(), .addr_in(cpu_even_address), .data_in(cheat_source_data),
+	.data_out(cheat_cpu_read_data)
+);
 
 logic [15:0] p1_port;
 logic [15:0] p2_port;
@@ -394,19 +417,7 @@ always_ff @(posedge clk) begin
 					else begin
 						if (!mapped_cycle)
 							debug_unmapped_cycles <= debug_unmapped_cycles + 16'd1;
-						if (cs_work) cpu_data_in <= work_read_data;
-						else if (cs_aux) cpu_data_in <= aux_q;
-						else if (cs_dsw1) cpu_data_in <= {8'hff, dip_switches[7:0]};
-						else if (cs_dsw2) cpu_data_in <= {8'hff, dip_switches[15:8]};
-						else if (cs_p1) cpu_data_in <= p1_port;
-						else if (cs_p2) cpu_data_in <= p2_port;
-						else if (cs_system) cpu_data_in <= system_port;
-						else if (cs_x1) cpu_data_in <= x1_q;
-						else if (cs_sprite) cpu_data_in <= sprite_q;
-						else if (cs_palette) cpu_data_in <= palette_q;
-						else if (cs_video_regs) cpu_data_in <= cpu_video_reg_q;
-						else if (cs_tmp) cpu_data_in <= tmp_q;
-						else cpu_data_in <= 16'hffff;
+						cpu_data_in <= raw_cpu_read_data;
 						cpu_dtack_n <= 1'b0;
 						bus_state <= BUS_ACK;
 					end
@@ -414,13 +425,13 @@ always_ff @(posedge clk) begin
 			end
 
 			BUS_ROM_WAIT: if (rom_ack == rom_req) begin
-				cpu_data_in <= rom_dout;
+				cpu_data_in <= cheat_cpu_read_data;
 				cpu_dtack_n <= 1'b0;
 				bus_state <= BUS_ACK;
 			end
 
 			BUS_RAM_WAIT: if (ram_ack == ram_req) begin
-				cpu_data_in <= ram_dout;
+				cpu_data_in <= raw_cpu_read_data;
 				cpu_dtack_n <= 1'b0;
 				bus_state <= BUS_ACK;
 			end
