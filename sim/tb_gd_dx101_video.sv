@@ -2,6 +2,7 @@
 module tb_gd_dx101_video;
 logic clk=0; always #5 clk=~clk;
 logic reset=1;
+logic sprite_copy_busy=0;
 logic ce_pix=0;
 logic [8:0] h_count=0;
 logic [8:0] v_count=0;
@@ -80,6 +81,10 @@ end
 integer i;
 integer scheduler_line;
 integer scheduler_x;
+integer retained_bank;
+logic [8:0] retained_line;
+integer retained_work_bank;
+logic retained_work_valid;
 initial begin
 	for(i=0;i<131072;i=i+1) sprite_memory[i]=0;
 	// The stage-map/loading screen uses inverted -2.0 Y zoom and a phase of
@@ -331,6 +336,23 @@ initial begin
 			repeat(3) @(negedge clk);
 		end
 	end
+	// A frame-boundary sprite copy must not flush a completed HUD/playfield
+	// row. Only the row under construction can be discarded and retried.
+	retained_bank = dut.display_bank;
+	retained_line = dut.bank_line[retained_bank];
+	retained_work_bank = dut.work_bank;
+	retained_work_valid = dut.bank_valid[retained_work_bank] && !busy;
+	if (!dut.bank_valid[retained_bank])
+		$fatal(1, "no completed row available before sprite copy");
+	sprite_copy_busy = 1'b1;
+	repeat (3) @(posedge clk);
+	#1;
+	if (!dut.scheduler_started || !dut.bank_valid[retained_bank]
+	    || dut.bank_line[retained_bank] != retained_line
+	    || (retained_work_valid && !dut.bank_valid[retained_work_bank])
+	    || busy || dut.state != dut.R_IDLE)
+		$fatal(1, "sprite copy discarded a completed raster row");
+	sprite_copy_busy = 1'b0;
 	// The packed-list buffer ends before record 0x600. A saturated private
 	// header pointer must not make the renderer interpret base headers as
 	// descriptor data when the original list overloads that buffer.

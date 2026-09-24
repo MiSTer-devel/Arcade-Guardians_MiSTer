@@ -93,6 +93,19 @@ if ($LASTEXITCODE -ne 0) { throw 'Sprite RAM unit-test compilation failed' }
 & $vvp $output
 if ($LASTEXITCODE -ne 0) { throw 'Sprite RAM unit test failed' }
 
+$output = Join-Path $PSScriptRoot 'cpu_ram_scrub.out'
+& $iverilog -g2012 -s tb_gd_cpu_ram_scrub -o $output `
+    rtl/gd_word_ram.sv rtl/gd_mra_cheat_engine.sv `
+    rtl/gd_sprite_ram.sv rtl/gd_tmp68301.sv `
+    rtl/fx68k/hdl/verilator/fx68k.sv `
+    rtl/fx68k/hdl/verilator/fx68kAlu.sv `
+    rtl/fx68k/hdl/verilator/uaddrPla.sv `
+    rtl/gd_cpu_subsystem.sv sim/tb_gd_cpu_ram_scrub.sv
+if ($LASTEXITCODE -ne 0) { throw 'CPU RAM scrub unit-test compilation failed' }
+Push-Location (Join-Path $PSScriptRoot '../rtl/fx68k/hdl')
+try { & $vvp $output } finally { Pop-Location }
+if ($LASTEXITCODE -ne 0) { throw 'CPU RAM scrub unit test failed' }
+
 $output = Join-Path $PSScriptRoot 'tmp68301.out'
 & $iverilog -g2012 -s tb_gd_tmp68301 -o $output rtl/gd_tmp68301.sv sim/tb_gd_tmp68301.sv
 if ($LASTEXITCODE -ne 0) { throw 'TMP68301 unit-test compilation failed' }

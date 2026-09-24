@@ -147,6 +147,20 @@ post-explosion sequence. The replacement build adds the MRA cheat interface;
 its loader, code matching, big-endian byte lanes, and MRA format are covered by
 focused simulation and a clean full Quartus build.
 
+The unreleased fast-boot path differs from the original power-on sequence:
+the FPGA clears work and auxiliary RAM before the 68000 starts, then supplies
+the verified program checksum and skips the long destructive RAM exercise in
+the streamed program image. The original ZIP and MRA CRC checks are unchanged.
+The game still displays `ROM CHECK SUM..OK` and `RAM ACCESS..OK`, but these
+labels no longer mean that the 68000 executed the full original test loops.
+This patch is confined to startup; it is not a gameplay turbo mode. ROM
+loading displays black, not the former diagnostic gradient.
+
+The renderer now keeps completed scanlines while the DX-101 repacks its
+sprite list, instead of clearing all line buffers at each copy. This targets
+reported intermittent HUD disappearance during busy demo scenes; hardware
+validation is still in progress.
+
 Sprite-list overflow is protected against corruption of the base-list headers.
 Exact original-PCB sprite-overload behavior has not yet been established: the
 FPGA renderer currently stages at most 128 visible descriptors per scanline,

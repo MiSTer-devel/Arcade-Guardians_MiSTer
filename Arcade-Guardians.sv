@@ -191,7 +191,7 @@ gd_core core
 (
 	.clk(clk_sys), .cold_reset, .reset,
 	.memory_ready(memory_ready_sys),
-	.diagnostic_grid(1'b0), .service(status[3]), .turbo(status[26]), .pause(paused),
+	.service(status[3]), .turbo(status[26]), .pause(paused),
 	.rotate_180(status[25]),
 	.cheat_reset, .cheat_code,
 	.dip_switches, .joystick_p1, .joystick_p2,

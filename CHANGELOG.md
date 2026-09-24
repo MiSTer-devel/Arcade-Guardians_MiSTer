@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Replaced the old loading gradient/telemetry path with a black screen until
+  the game CPU begins fetching program ROM.
+- Shortened post-transfer startup by substituting the known-good program
+  checksum result and skipping the 68000's exhaustive power-on RAM loop.
+  The FPGA clears the same work/auxiliary RAM areas before releasing the CPU,
+  including on soft reset. The supplied ROM ZIP stays unmodified, and the
+  program's additive checksum remains unchanged through a tail-word correction.
+- Kept completed video scanlines across the DX-101 sprite-list copy while
+  aborting only an in-progress scanline, targeting transient HUD loss in busy
+  scenes. Added focused renderer and cold/warm RAM-scrub tests.
 - Buffered eight complete eight-byte graphics blocks between the MiSTer ROM
   stream and SDRAM writes. Host back-pressure now occurs only when that queue
   fills, instead of after every block. The existing board-tested SDRAM write

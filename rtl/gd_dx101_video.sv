@@ -18,6 +18,7 @@ module gd_dx101_video
 (
 	input  logic        clk,
 	input  logic        reset,
+	input  logic        sprite_copy_busy,
 	input  logic        ce_pix,
 	input  logic  [8:0] h_count,
 	input  logic  [8:0] v_count,
@@ -768,7 +769,17 @@ always_ff @(posedge clk) begin
 				next_render_line <= recovery_render_line;
 		end
 
-		case (state)
+		// The controller repacks its private sprite list at frame boundaries.
+		// The video RAM port is unavailable during that copy. Abort only the
+		// in-flight row; completed line banks remain valid for display. A full
+		// renderer reset here discards the entire look-ahead reservoir and can
+		// blank the HUD while the lower playfield continues rendering.
+		if (sprite_copy_busy) begin
+			state <= R_IDLE;
+			busy <= 1'b0;
+			if (busy) bank_valid[work_bank] <= 1'b0;
+		end
+		else case (state)
 			R_IDLE: begin
 				// Keep up to twelve completed rows ahead. This absorbs the clustered
 				// tile-cache misses from wide floating layers instead of repeating

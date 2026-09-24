@@ -11,9 +11,13 @@ Place a legally obtained, unmodified `grdians.zip` at
 Please test the following areas:
 
 1. Time the MRA launch and confirm that no gradient/test grid appears while the
-   ROM is sent.
+   ROM is sent; the development fast-boot build should show black until the
+   game begins drawing. Measure the interval after transfer completes as well
+   as the total launch time.
 2. Confirm the game's startup self-check reports `ROM CHECK SUM..OK` and
-   `RAM ACCESS..OK`.
+   `RAM ACCESS..OK`. In the development fast-boot build, these are supplied
+   success results after MRA validation and FPGA RAM clearing, not the full
+   original CPU self-test loops.
 3. After the startup self-check completes, open the MiSTer OSD's **Cheats**
    menu. Cheats default to Off. Try each option independently, then disable it
    and confirm normal behavior resumes.
@@ -30,6 +34,9 @@ Please test the following areas:
 9. Map Pause in the MiSTer controller menu and confirm that it freezes game
    logic and sound while leaving the video raster and OSD responsive. Press it
    again to resume.
+10. Let the attract-mode demo play through busy combat. Health bars, avatars,
+    scores and hit counters must stay visible while characters and the
+    background continue drawing.
 
 When reporting a problem, include the display connection (HDMI/direct analog,
 scaler/scandoubler settings), MiSTer.ini video options, SDRAM module, controller,

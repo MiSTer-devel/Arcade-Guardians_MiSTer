@@ -8,7 +8,6 @@ module gd_core
 	input  logic        cold_reset,
 	input  logic        reset,
 	input  logic        memory_ready,
-	input  logic        diagnostic_grid,
 	input  logic        service,
 	input  logic        turbo,
 	input  logic        pause,
@@ -263,7 +262,7 @@ gd_gfx_arbiter gfx_arbiter
 
 gd_dx101_video #(.AHEAD_RENDER(1'b1)) video
 (
-	.clk, .reset(runtime_reset || sprite_buffer_busy),
+	.clk, .reset(runtime_reset), .sprite_copy_busy(sprite_buffer_busy),
 	.ce_pix, .h_count, .v_count,
 	.hblank, .vblank, .raster_active(raster_enable[0]), .video_control,
 	.rotate_180,
@@ -283,29 +282,12 @@ gd_dx101_video #(.AHEAD_RENDER(1'b1)) video
 );
 
 always_comb begin
-	red = renderer_red;
-	green = renderer_green;
-	blue = renderer_blue;
-	if (diagnostic_grid && !hblank && !vblank) begin
-		red = {h_count[7:3], 3'b000};
-		green = {v_count[7:3], 3'b000};
-		blue = cpu_running ? 8'h60 : 8'h20;
-		if ((h_count[4:0] == 5'd0) || (v_count[4:0] == 5'd0)) begin
-			red = 8'h50;
-			green = 8'h50;
-			blue = 8'h50;
-		end
-		if (v_count >= 9'd216) begin
-			// Loader telemetry, visible only while the diagnostic raster is
-			// active. This makes pre-ROM hardware stalls remotely observable:
-			// G7 SDRAM ready, G6 DDR busy, G5 DDR loader wait, G4 download,
-			// B7 ROM ready, B6 DDR loader idle, B5 CPU running.
-			red = layout_error ? 8'hff : {accepted_bytes[26:22], 3'b000};
-			green = {memory_ready, ddr_busy, ddr_load_wait,
-			         rom_downloading, 1'b0, regions_seen};
-			blue = {rom_ready, ddr_load_idle, cpu_running, 5'b00000};
-		end
-	end
+	// Never expose uninitialized renderer RAM or legacy diagnostic gradients
+	// while MiSTer streams the ROM or while the RAM scrub still holds the CPU.
+	// The game's own display begins once its first program fetch starts.
+	red = (runtime_reset || !cpu_running) ? 8'd0 : renderer_red;
+	green = (runtime_reset || !cpu_running) ? 8'd0 : renderer_green;
+	blue = (runtime_reset || !cpu_running) ? 8'd0 : renderer_blue;
 end
 
 endmodule

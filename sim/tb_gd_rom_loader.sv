@@ -42,6 +42,23 @@ task automatic send_graphics_byte(input [26:0] address, input [7:0] data);
 	end
 endtask
 
+task automatic check_program_patch(
+	input [26:0] address, input [7:0] original, input [7:0] expected
+);
+	begin
+		@(negedge clk);
+		ioctl_addr = address;
+		ioctl_data = original;
+		ioctl_wr = 1'b1;
+		#1;
+		if (ioctl_wait || !ddr_load_wr || ddr_load_addr !== address[25:0]
+		    || ddr_load_data !== expected)
+			$fatal(1, "program byte %h loaded as %h, expected %h",
+			       address, ddr_load_data, expected);
+		ioctl_wr = 1'b0;
+	end
+endtask
+
 function automatic [63:0] expected_block(input integer block_number);
 	logic [7:0] b;
 	begin
@@ -123,6 +140,25 @@ initial begin
 	end
 	if (gfx_req !== gfx_ack || dut.gfx_queue_count !== 0)
 		$fatal(1, "graphics queue did not drain after final acknowledge");
+	check_program_patch(27'h0000269, 8'h00, 8'h00);
+	check_program_patch(27'h000026a, 8'h41, 8'h3a);
+	check_program_patch(27'h000026b, 8'hf8, 8'h3c);
+	check_program_patch(27'h000026c, 8'h00, 8'h47);
+	check_program_patch(27'h000026d, 8'h00, 8'hbf);
+	check_program_patch(27'h000026e, 8'h70, 8'h60);
+	check_program_patch(27'h000026f, 8'h00, 8'h00);
+	check_program_patch(27'h0000270, 8'h32, 8'h00);
+	check_program_patch(27'h0000271, 8'h3c, 8'h24);
+	check_program_patch(27'h0000272, 8'h00, 8'h00);
+	check_program_patch(27'h0000293, 8'h00, 8'h00);
+	check_program_patch(27'h0000294, 8'h41, 8'h60);
+	check_program_patch(27'h0000295, 8'hf9, 8'h00);
+	check_program_patch(27'h0000296, 8'h00, 8'h00);
+	check_program_patch(27'h0000297, 8'h20, 8'h68);
+	check_program_patch(27'h0000298, 8'h00, 8'h00);
+	check_program_patch(27'h01ffffd, 8'h00, 8'h00);
+	check_program_patch(27'h01ffffe, 8'h00, 8'he3);
+	check_program_patch(27'h01fffff, 8'h00, 8'hc6);
 	$display("PASS gd_rom_loader streams ahead through queued SDRAM writes");
 	$finish;
 end

@@ -83,6 +83,33 @@ always_comb begin
 	ddr_load_wr = ioctl_wr && !ioctl_wait
 		&& (stream_program || stream_sample);
 	ddr_load_data = ioctl_data;
+	// The P-FG01-1 power-on routine sums all 0x100000 program words and
+	// performs six CPU accesses at each of 56K on-chip RAM locations. The
+	// CPU subsystem now clears those RAMs before release. Supply the verified
+	// ROM sum in D5, leave D6/D7 clear, and branch to the routine that stores
+	// the three success results. This changes only power-on diagnostics;
+	// normal game code and its CPU/video timing are untouched. Compensate the
+	// changed ROM words in the zero-filled tail so the full-program additive
+	// checksum still equals the original 0x47bf in the service menu.
+	if (stream_program) begin
+		case (ioctl_addr)
+			27'h000026a: ddr_load_data = 8'h3a; // move.w #$47bf,d5
+			27'h000026b: ddr_load_data = 8'h3c;
+			27'h000026c: ddr_load_data = 8'h47;
+			27'h000026d: ddr_load_data = 8'hbf;
+			27'h000026e: ddr_load_data = 8'h60; // bra.w $000294
+			27'h000026f: ddr_load_data = 8'h00;
+			27'h0000270: ddr_load_data = 8'h00;
+			27'h0000271: ddr_load_data = 8'h24;
+			27'h0000294: ddr_load_data = 8'h60; // bra.w $0002fe
+			27'h0000295: ddr_load_data = 8'h00;
+			27'h0000296: ddr_load_data = 8'h00;
+			27'h0000297: ddr_load_data = 8'h68;
+			27'h01ffffe: ddr_load_data = 8'he3; // additive sum correction
+			27'h01fffff: ddr_load_data = 8'hc6;
+			default: ;
+		endcase
+	end
 	if (stream_sample)
 		ddr_load_addr = 26'h0200000 + (ioctl_addr - 27'h2200000);
 	else

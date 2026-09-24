@@ -65,6 +65,27 @@ module gd_cpu_subsystem
 
 // fx68k advances on alternating Phi1/Phi2 enables. 33.333 MHz phase
 // events produce the TMP68301's 16.667 MHz CPU clock from 68.75 MHz.
+// The original power-on RAM test leaves 32K work-RAM words and 24K auxiliary
+// RAM words cleared. Scrub those on-chip memories at the FPGA clock before
+// releasing the CPU; this takes under a millisecond and is also repeated on
+// every soft reset, so the fast-boot ROM branch sees the same cleared state.
+logic [15:0] scrub_index;
+logic        scrub_active;
+wire         scrub_work = scrub_active && !scrub_index[15];
+wire         scrub_aux = scrub_active && scrub_index[15];
+wire         system_reset = reset || scrub_active;
+always_ff @(posedge clk) begin
+	if (reset) begin
+		scrub_index <= 16'd0;
+		scrub_active <= 1'b1;
+	end
+	else if (scrub_active) begin
+		if (scrub_index == 16'd57343)
+			scrub_active <= 1'b0;
+		else scrub_index <= scrub_index + 16'd1;
+	end
+end
+
 localparam logic [31:0] CPU_EVENT_INCREMENT = 32'd2082408386;
 localparam logic [31:0] TURBO_EVENT_INCREMENT = 32'd3123612579;
 logic [31:0] cpu_clock_accumulator;
@@ -89,7 +110,7 @@ always_comb timer_clock_sum = {1'b0, timer_clock_accumulator}
 always_ff @(posedge clk) begin
 	cpu_phi1 <= 1'b0;
 	cpu_phi2 <= 1'b0;
-	if (reset) begin
+	if (system_reset) begin
 		cpu_clock_accumulator <= 32'd0;
 		cpu_half_phase <= 1'b0;
 	end
@@ -109,7 +130,7 @@ end
 
 always_ff @(posedge clk) begin
 	timer_cpu_ce <= 1'b0;
-	if (reset) begin
+	if (system_reset) begin
 		timer_clock_accumulator <= 32'd0;
 		timer_half_phase <= 1'b0;
 	end
@@ -145,7 +166,7 @@ logic tmp_iack;
 
 fx68k main_cpu
 (
-	.clk(clk), .HALTn(1'b1), .extReset(reset), .pwrUp(reset),
+	.clk(clk), .HALTn(1'b1), .extReset(system_reset), .pwrUp(system_reset),
 	.enPhi1(cpu_phi1), .enPhi2(cpu_phi2),
 	.eRWn(cpu_rw), .ASn(cpu_as_n), .LDSn(cpu_lds_n), .UDSn(cpu_uds_n),
 	.E(), .VMAn(), .FC0(cpu_fc[0]), .FC1(cpu_fc[1]), .FC2(cpu_fc[2]),
@@ -158,7 +179,7 @@ fx68k main_cpu
 
 logic cpu_data_strobe_seen;
 always_ff @(posedge clk) begin
-	if (reset || cpu_as_n) cpu_data_strobe_seen <= 1'b0;
+	if (system_reset || cpu_as_n) cpu_data_strobe_seen <= 1'b0;
 	else if (cpu_data_strobe) cpu_data_strobe_seen <= 1'b1;
 end
 
@@ -211,8 +232,11 @@ wire [15:0] work_q;
 wire [15:0] work_video_unused;
 gd_word_ram #(.ADDR_WIDTH(15)) work_ram
 (
-	.clk(clk), .address(cpu_even_address[15:1]), .data(cpu_data_out),
-	.byte_enable(cpu_byte_enable), .write(local_write && cs_work), .q(work_q),
+	.clk(clk),
+	.address(scrub_work ? scrub_index[14:0] : cpu_even_address[15:1]),
+	.data(scrub_work ? 16'd0 : cpu_data_out),
+	.byte_enable(scrub_work ? 2'b11 : cpu_byte_enable),
+	.write(scrub_work || (!scrub_active && local_write && cs_work)), .q(work_q),
 	.video_clk(clk), .video_address(15'd0), .video_q(work_video_unused)
 );
 
@@ -223,8 +247,10 @@ wire [15:0] aux_video_unused;
 wire [14:0] aux_address = cpu_even_address[15:1] - 15'h2000;
 gd_word_ram #(.ADDR_WIDTH(15), .NUM_WORDS(24576)) aux_ram
 (
-	.clk(clk), .address(aux_address), .data(cpu_data_out),
-	.byte_enable(cpu_byte_enable), .write(local_write && cs_aux), .q(aux_q),
+	.clk(clk), .address(scrub_aux ? scrub_index[14:0] : aux_address),
+	.data(scrub_aux ? 16'd0 : cpu_data_out),
+	.byte_enable(scrub_aux ? 2'b11 : cpu_byte_enable),
+	.write(scrub_aux || (!scrub_active && local_write && cs_aux)), .q(aux_q),
 	.video_clk(clk), .video_address(15'd0), .video_q(aux_video_unused)
 );
 
@@ -242,7 +268,7 @@ always_comb raster_rearm = local_write && cs_video_regs
 	&& cpu_byte_enable[0] && cpu_data_out[0];
 gd_sprite_ram sprite_ram
 (
-	.clk(clk), .reset, .buffer_trigger(sprite_buffer_trigger),
+	.clk(clk), .reset(system_reset), .buffer_trigger(sprite_buffer_trigger),
 	.address(cpu_even_address[17:1]), .data(cpu_data_out),
 	.byte_enable(cpu_byte_enable), .write(local_write && cs_sprite), .q(sprite_q),
 	.video_clk(clk), .video_address(sprite_video_address), .video_q(sprite_video_q),
@@ -260,7 +286,7 @@ gd_word_ram #(.ADDR_WIDTH(15)) palette_ram
 logic [15:0] video_registers [0:31];
 integer vr;
 always_ff @(posedge clk) begin
-	if (reset) begin
+	if (system_reset) begin
 		for (vr = 0; vr < 32; vr = vr + 1) video_registers[vr] <= 16'd0;
 	end
 	else if (local_write && cs_video_regs) begin
@@ -338,7 +364,7 @@ end
 wire [15:0] tmp_q;
 gd_tmp68301 tmp68301_regs
 (
-	.clk(clk), .reset(reset), .cpu_ce(timer_cpu_ce), .cs(cs_tmp),
+	.clk(clk), .reset(system_reset), .cpu_ce(timer_cpu_ce), .cs(cs_tmp),
 	.write(local_write && cs_tmp),
 	.address(cpu_even_address[9:0]), .data(cpu_data_out),
 	.byte_enable(cpu_byte_enable), .q(tmp_q), .ext_irq0(vblank),
@@ -348,7 +374,7 @@ gd_tmp68301 tmp68301_regs
 
 always_ff @(posedge clk) begin
 	x1_write <= 1'b0;
-	if (reset) begin
+	if (system_reset) begin
 		x1_address <= 13'd0;
 		x1_data <= 16'd0;
 		x1_byte_enable <= 2'd0;
@@ -369,7 +395,7 @@ end
 always_ff @(posedge clk) begin
 	debug_address <= cpu_bus_address;
 	tmp_iack <= 1'b0;
-	if (reset) begin
+	if (system_reset) begin
 		bus_state <= BUS_IDLE;
 		cpu_dtack_n <= 1'b1;
 		cpu_data_in <= 16'hffff;
