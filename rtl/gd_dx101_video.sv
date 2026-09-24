@@ -825,7 +825,21 @@ always_ff @(posedge clk) begin
 				sprites_remaining <= {1'b0, h0[7:0]} + 9'd1;
 				sprite_pointer <= {h3[14:0], 2'b00};
 				sprite_address <= {h3[14:0], 2'b00};
-				state <= R_SPRITE_WAIT;
+				// A saturated packed-list pointer is outside the 0x3000-byte
+				// descriptor area; never treat base-list headers as sprites.
+				if (h3[14:0] >= 15'h0600) begin
+					if (h0[15]) begin
+						active_total <= active_count;
+						active_index <= 8'd0;
+						state <= (active_count == 8'd0)
+							? R_DONE : R_ACTIVE_LOAD;
+					end
+					else begin
+						header_index <= header_index + 9'd1;
+						state <= R_HEADER_ISSUE;
+					end
+				end
+				else state <= R_SPRITE_WAIT;
 			end
 
 			// The wait clocks the initial descriptor address into the four-bank

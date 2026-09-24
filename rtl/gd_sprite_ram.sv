@@ -46,9 +46,14 @@ logic  [8:0] copy_descriptors_remaining;
 logic [16:0] copy_read_address;
 logic [14:0] copy_dest_record;
 logic        copy_last_header;
+localparam logic [14:0] PACKED_RECORD_LIMIT = 15'h0600;
 
 assign buffer_busy = (copy_state != C_IDLE);
-wire copy_record_write = (copy_state == C_DESCRIPTOR_CAPTURE);
+// The packed destination occupies bytes 0x0000-0x2fff. A longer source list
+// must not run into the base headers beginning at byte 0x3000. Saturating the
+// pointer also leaves later private headers outside the valid packed range.
+wire copy_record_write = (copy_state == C_DESCRIPTOR_CAPTURE)
+	&& (copy_dest_record < PACKED_RECORD_LIMIT);
 wire [14:0] bank_cpu_address = copy_record_write
 	? copy_dest_record : address[16:2];
 wire [16:0] bank_video_address = buffer_busy
@@ -95,7 +100,8 @@ always_ff @(posedge clk) begin
 			end
 			C_DESCRIPTOR_WAIT: copy_state <= C_DESCRIPTOR_CAPTURE;
 			C_DESCRIPTOR_CAPTURE: begin
-				copy_dest_record <= copy_dest_record + 15'd1;
+				if (copy_dest_record < PACKED_RECORD_LIMIT)
+					copy_dest_record <= copy_dest_record + 15'd1;
 				if (copy_descriptors_remaining == 9'd1) begin
 					if (copy_last_header)
 						copy_state <= C_IDLE;

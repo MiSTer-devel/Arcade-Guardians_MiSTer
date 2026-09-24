@@ -81,8 +81,8 @@ ROM, downloader, or helper script is required.
 - Seta X1-010-compatible 16-voice PCM sound
 - Direct MRA assembly of the 2 MiB program, 32 MiB graphics, and 1 MiB sample
   regions
-- Four-word graphics-loader transactions using four standards-compliant SDRAM
-  WRITE commands under one active row
+- Eight-entry graphics-loader queue feeding four-word transactions with four
+  standards-compliant SDRAM WRITE commands under one active row
 - Board-programmed 410 x 258 raster with 304 x 232 visible pixels
   (15.244 kHz horizontal, 59.085 Hz vertical)
 - MiSTer scaler, HDMI, analog video, audio, controller, DIP, reset, and OSD
@@ -146,6 +146,12 @@ SDRAM loading, the correctly scaled stage-map/loading screen, and the Stage 1
 post-explosion sequence. The replacement build adds the MRA cheat interface;
 its loader, code matching, big-endian byte lanes, and MRA format are covered by
 focused simulation and a clean full Quartus build.
+
+Sprite-list overflow is protected against corruption of the base-list headers.
+Exact original-PCB sprite-overload behavior has not yet been established: the
+FPGA renderer currently stages at most 128 visible descriptors per scanline,
+and the available DX-101 reference does not specify a matching hardware limit.
+This is not a claim of 1:1 overload or flicker behavior.
 
 ## Source and licensing
 

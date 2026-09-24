@@ -54,7 +54,7 @@ localparam CONF_STR = {
 	"R[0],Reset and close OSD;",
 	"J1,Attack,Jump,Special,Pause,Start,Coin,Service;",
 	"jn,A,B,X,Y,Start,Select,R;",
-	"v,1.2.1;",
+	"v,1.2.1 queue-test;",
 	"V,v",`BUILD_DATE
 };
 

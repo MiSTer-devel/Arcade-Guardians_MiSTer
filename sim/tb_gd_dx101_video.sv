@@ -331,6 +331,21 @@ initial begin
 			repeat(3) @(negedge clk);
 		end
 	end
+	// The packed-list buffer ends before record 0x600. A saturated private
+	// header pointer must not make the renderer interpret base headers as
+	// descriptor data when the original list overloads that buffer.
+	sprite_memory[17'h01803]=16'h8600;
+	reset<=1;
+	repeat(3) @(posedge clk);
+	reset<=0;
+	@(posedge clk); ce_pix<=1; h_count<=0; v_count<=248;
+	@(posedge clk); ce_pix<=0; h_count<=1;
+	wait(busy);
+	while(busy) begin
+		@(posedge clk);
+		if (dut.state == dut.R_SPRITE_WAIT)
+			$fatal(1,"invalid packed pointer entered sprite scan");
+	end
 	$display("PASS gd_dx101_video drew normal and floating-tilemap 8bpp rows");
 	$finish;
 end

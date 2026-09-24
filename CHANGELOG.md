@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Buffered eight complete eight-byte graphics blocks between the MiSTer ROM
+  stream and SDRAM writes. Host back-pressure now occurs only when that queue
+  fills, instead of after every block. The existing board-tested SDRAM write
+  sequence and fixed `Arcade-Guardians.rbf` filename remain in use.
+- Bound DX-101 packed sprite-list writes to the modeled 0x3000-byte
+  destination and ignore saturated pointers during rendering, preventing a
+  descriptor overload from overwriting source headers. Added overflow
+  regressions; the original PCB's per-scanline sprite limit is still unknown.
+
 ## 1.2.1 - 2026-09-06
 
 - Moved all twelve optional cheats from fixed `CONF_STR` status bits into the

@@ -111,12 +111,33 @@ initial begin
 	repeat (2) @(posedge clk);
 	expect_record(17'h0187c, 64'h001f_0000_0000_8000);
 
+	// Seven 256-record headers exceed the 0x600-record packed destination.
+	// The seventh pointer must saturate, and descriptor writes must not
+	// overwrite the original base list at byte offset 0x3000.
+	for (header = 0; header < 7; header = header + 1) begin
+		write_word(17'h01800 + header * 4 + 0,
+			(header == 6) ? 16'h80ff : 16'h00ff);
+		write_word(17'h01800 + header * 4 + 1, 16'h0000);
+		write_word(17'h01800 + header * 4 + 2, 16'h0000);
+		write_word(17'h01800 + header * 4 + 3, 16'h8800);
+	end
+	buffer_trigger <= 1'b1;
+	@(posedge clk);
+	buffer_trigger <= 1'b0;
+	@(posedge clk);
+	if (!buffer_busy) $fatal(1, "overflow transaction did not start");
+	while (buffer_busy) @(posedge clk);
+	repeat (2) @(posedge clk);
+	expect_record(17'h01818, 64'h8600_0000_0000_80ff);
+	if (dut.bank_memory[0][15'h0600] !== 16'h00ff)
+		$fatal(1, "packed sprite overflow overwrote the base list");
+
 	$display("PASS gd_sprite_ram performed DX-101 list buffering");
 	$finish;
 end
 
 initial begin
-	#20000;
+	#200000;
 	$fatal(1, "timeout");
 end
 endmodule
