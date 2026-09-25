@@ -75,6 +75,20 @@ if ($LASTEXITCODE -ne 0) { throw 'ROM loader unit-test compilation failed' }
 & $vvp $output
 if ($LASTEXITCODE -ne 0) { throw 'ROM loader unit test failed' }
 
+$output = Join-Path $PSScriptRoot 'wide_rom_adapter.out'
+& $iverilog -g2012 -s tb_gd_wide_rom_adapter -o $output `
+    rtl/gd_wide_rom_adapter.sv sim/tb_gd_wide_rom_adapter.sv
+if ($LASTEXITCODE -ne 0) { throw 'Wide ROM adapter unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'Wide ROM adapter unit test failed' }
+
+$output = Join-Path $PSScriptRoot 'ddr_preload_replay.out'
+& $iverilog -g2012 -s tb_gd_ddr_preload_replay -o $output `
+    rtl/gd_ddr_preload_replay.sv sim/tb_gd_ddr_preload_replay.sv
+if ($LASTEXITCODE -ne 0) { throw 'DDR preload replay unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'DDR preload replay unit test failed' }
+
 $output = Join-Path $PSScriptRoot 'sdram_dma.out'
 & $iverilog -g2012 -s tb_gd_sdram_dma -o $output rtl/gd_sdram.sv sim/tb_gd_sdram_dma.sv
 if ($LASTEXITCODE -ne 0) { throw 'SDRAM DMA unit-test compilation failed' }

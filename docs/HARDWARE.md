@@ -45,11 +45,19 @@ a 512x256 raster at exactly 60 Hz; this FPGA core uses the board-programmed
 timing so native analog RGB has the original porch and sync geometry.
 
 MAME also describes the DX-101 register `0x26` list copy/reformat as guesswork.
-The FPGA implementation performs an atomic hardware-style list transaction:
-it snapshots the base headers, packs the referenced descriptors into private
-sprite RAM, rewrites their pointers, and holds the 68000 until the transaction
-finishes. This behavior was derived from Guardians' live list updates and
-long-run hardware observation rather than copied from MAME's transform.
+The FPGA implementation performs a bus-master list transaction: it snapshots
+the base headers, packs the referenced descriptors into private sprite RAM,
+rewrites their pointers, and holds the 68000 until the transaction finishes.
+Copy reads use the CPU-side sprite-RAM port, keeping the renderer's video port
+available so a copy does not abort an in-progress scanline. This behavior was
+derived from Guardians' live list updates and long-run hardware observation
+rather than copied from MAME's transform.
+
+The private header table supports 128 groups. A raw Guardians attract-mode
+display list reached 40 groups; an earlier 32-group limit synthesized a false
+end marker before the late full-screen overlay, coinciding with complete HUD
+dropout while actors and background continued. The 128-group table fits in
+logic without another M10K and leaves ample margin over the observed peak.
 
 The renderer implements the color-depth modes actually observed in Guardians
 (modes 4 and 5), opaque objects, local/global sizes, floating tilemaps, flips,

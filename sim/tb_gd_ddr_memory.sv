@@ -9,6 +9,10 @@ logic [25:0] load_addr = 0;
 logic [7:0] load_data = 0;
 logic load_wait;
 logic load_idle;
+logic [25:0] preload_addr = 0;
+logic preload_req = 0;
+logic [63:0] preload_data;
+logic preload_ack;
 logic [20:0] cpu_addr = 0;
 logic cpu_req = 0;
 logic [15:0] cpu_dout;
@@ -112,6 +116,11 @@ initial begin
 	if (memory[0] !== 64'h0706050403020100) $fatal(1,"line0=%h",memory[0]);
 	if (memory[1] !== 64'h0f0e0d0c0b0a0908) $fatal(1,"line1=%h",memory[1]);
 	if (memory[2] !== 64'h1716151413121110) $fatal(1,"line2=%h",memory[2]);
+	preload_addr <= 26'd8;
+	preload_req <= ~preload_req;
+	do @(posedge clk); while (preload_ack != preload_req);
+	if (preload_data !== 64'h0f0e0d0c0b0a0908)
+		$fatal(1,"staged DDR read=%h",preload_data);
 
 	for (i=0; i<8; i=i+1) send_byte(26'h0400000 + i, (8'h80 + i));
 	while (!load_idle) @(posedge clk);

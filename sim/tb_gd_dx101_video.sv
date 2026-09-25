@@ -2,7 +2,6 @@
 module tb_gd_dx101_video;
 logic clk=0; always #5 clk=~clk;
 logic reset=1;
-logic sprite_copy_busy=0;
 logic ce_pix=0;
 logic [8:0] h_count=0;
 logic [8:0] v_count=0;
@@ -12,6 +11,11 @@ logic raster_active=1;
 logic rowscroll_override_valid=0;
 logic [14:0] rowscroll_override_record=0;
 logic [15:0] rowscroll_override_data=0;
+logic rowscroll_seed_valid=0;
+logic [15:0] rowscroll_seed_data=0;
+logic rowscroll_live_valid=0;
+logic [14:0] rowscroll_live_record=0;
+logic [15:0] rowscroll_live_data=0;
 logic [15:0] video_control=0;
 logic rotate_180=0;
 logic [26:0] video_x_offset=0;
@@ -81,10 +85,6 @@ end
 integer i;
 integer scheduler_line;
 integer scheduler_x;
-integer retained_bank;
-logic [8:0] retained_line;
-integer retained_work_bank;
-logic retained_work_valid;
 initial begin
 	for(i=0;i<131072;i=i+1) sprite_memory[i]=0;
 	// The stage-map/loading screen uses inverted -2.0 Y zoom and a phase of
@@ -128,7 +128,7 @@ initial begin
 	release dut.h0;
 	// A recorded raster scroll word replaces only the matching packed
 	// descriptor's word 2 before it enters the active scanline list.
-	force dut.scan_record_q = 64'h1234_5678_9abc_def0;
+	force dut.scan_record_q = 64'h1234_7a78_9abc_def0;
 	force dut.sprite_pointer = {15'h0010, 2'b00};
 	force dut.h3 = 16'h8000;
 	force dut.header_index = 9'd3;
@@ -140,14 +140,14 @@ initial begin
 		$fatal(1, "matching rowscroll history did not override descriptor");
 	rowscroll_override_record = 15'h0011;
 	#1;
-	if (dut.scan_s2 !== 16'h5678)
+	if (dut.scan_s2 !== 16'h7a78)
 		$fatal(1, "rowscroll history changed a different descriptor");
 	// The same record address may be reused by a normal/foreground header.
 	// Rowscroll must remain confined to floating background layers.
 	rowscroll_override_record = 15'h0010;
 	force dut.h3 = 16'h0000;
 	#1;
-	if (dut.scan_s2 !== 16'h5678)
+	if (dut.scan_s2 !== 16'h7a78)
 		$fatal(1, "rowscroll leaked into a foreground layer");
 	force dut.h3 = 16'h8000;
 	force dut.header_index = 9'd1;
@@ -159,7 +159,7 @@ initial begin
 	force dut.sprite_pointer = {15'h0011, 2'b00};
 	force dut.header_index = 9'd3;
 	#1;
-	if (dut.scan_s2 !== 16'h5678)
+	if (dut.scan_s2 !== 16'h7a78)
 		$fatal(1, "rowscroll leaked into a floating foreground descriptor");
 	// Sharing a floating page is not sufficient identity. Stage 1 uses two
 	// adjacent chunks on the same page and raster-scrolls only one at a time.
@@ -167,12 +167,113 @@ initial begin
 	#1;
 	if (dut.scan_s2 !== 16'h7a10)
 		$fatal(1, "rowscroll matched a different record by page alone");
+	// A scene transition can reuse the same packed address for a tilemap on
+	// another page; stale history must not redirect it to the old page.
+	force dut.sprite_pointer = {15'h0010, 2'b00};
 	force dut.scan_record_q = 64'h1234_5678_9abc_def0;
+	#1;
+	if (dut.scan_s2 !== 16'h5678)
+		$fatal(1, "stale rowscroll changed a new scene's tilemap page");
+	// The flame kick alternates a 64-line raster plane between adjacent
+	// four-record groups. Its newly selected page is still unmodified when a
+	// speculative row is drawn, but the previous group's trace is valid.
+	force dut.h0 = 16'h0503;
+	force dut.h1 = 16'h0070;
+	force dut.h2 = 16'h0080;
+	force dut.sprite_pointer = {15'h0014, 2'b00};
+	force dut.scan_record_q = 64'h0080_7c00_0c40_5000;
+	rowscroll_override_record = 15'h0010;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "alternating flame group lost prior raster trace");
+	force dut.sprite_pointer = {15'h0010, 2'b00};
+	rowscroll_override_record = 15'h0014;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "reverse alternating flame group lost prior raster trace");
+	force dut.sprite_pointer = {15'h000c, 2'b00};
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "later flame group shift lost prior raster trace");
+	rowscroll_override_record = 15'h000c;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "same flame record rejected a live tilemap-page change");
+	rowscroll_override_record = 15'h0010;
+	force dut.sprite_pointer = {15'h0015, 2'b00};
+	#1;
+	if (dut.scan_s2 !== 16'h7c00)
+		$fatal(1, "flame replay leaked outside adjacent four-record group");
+	// The first striped frame still has page 24 in the packed source record,
+	// before raster writes change that same record to the fire page 30.
+	force dut.sprite_pointer = {15'd16, 2'b00};
+	force dut.scan_record_q = 64'h0080_6000_0c40_5000;
+	rowscroll_override_record = 15'd16;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "initial flame page transition rejected prior raster trace");
+	rowscroll_override_valid = 1'b0;
+	#1;
+	if (dut.scan_s2 !== 16'h6000)
+		$fatal(1, "initial flame page changed without valid raster history");
+	rowscroll_seed_valid = 1'b1;
+	rowscroll_seed_data = 16'h7bef;
+	#1;
+	if (dut.scan_s2 !== 16'h7bef)
+		$fatal(1, "initial flame chunk did not use prior-frame seed");
+	rowscroll_seed_valid = 1'b0;
+	rowscroll_live_valid = 1'b1;
+	rowscroll_live_record = 15'd16;
+	rowscroll_live_data = 16'h7bf2;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "first active flame frame lost live raster fallback");
+	force dut.scan_record_q = 64'h0080_7800_0c40_5000;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "live fallback missed a partially updated fire page");
+	rowscroll_live_record = 15'd69;
+	#1;
+	if (dut.scan_s2 !== 16'h7800)
+		$fatal(1, "live raster fallback crossed descriptor groups");
+	rowscroll_live_valid = 1'b0;
+	rowscroll_override_valid = 1'b1;
+	force dut.scan_record_q = 64'h0080_7c00_0c40_5000;
+	// The second fire plane later uses packed records 69..79. Its final
+	// transition shifts the group base by three, not four, packed records.
+	force dut.sprite_pointer = {15'd73, 2'b00};
+	rowscroll_override_record = 15'd69;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "second fire plane lost its first group shift");
+	force dut.sprite_pointer = {15'd76, 2'b00};
+	rowscroll_override_record = 15'd73;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "second fire plane lost its three-record shift");
+	force dut.sprite_pointer = {15'd69, 2'b00};
+	rowscroll_override_record = 15'd12;
+	#1;
+	if (dut.scan_s2 !== 16'h7bf2)
+		$fatal(1, "full-screen fire transition lost prior raster trace");
+	force dut.sprite_pointer = {15'd76, 2'b00};
+	rowscroll_override_record = 15'd12;
+	#1;
+	if (dut.scan_s2 !== 16'h7c00)
+		$fatal(1, "fire replay crossed between independent planes");
+	force dut.sprite_pointer = {15'h0014, 2'b00};
+	force dut.h1 = 16'h0060;
+	#1;
+	if (dut.scan_s2 !== 16'h7c00)
+		$fatal(1, "flame replay changed a different tilemap format");
 	rowscroll_override_valid = 1'b0;
 	release dut.scan_record_q;
 	release dut.sprite_pointer;
 	release dut.h3;
 	release dut.header_index;
+	release dut.h0;
+	release dut.h1;
+	release dut.h2;
 	// The heat descriptor must not overwrite an actor pixel beyond X=63. This
 	// also catches the former six-bit shift truncation in the occupancy lookup.
 	if (dut.physical_draw_address(6'd25, 3'd2) !== 9'd202)
@@ -275,8 +376,78 @@ initial begin
 		if(line_buffer1_at(10+i) !== (15'h0011+i))
 			$fatal(1,"pixel %0d=%h",i,line_buffer1_at(10+i));
 
+	// Adjacent records must both survive the scan pipeline. The game uses
+	// multi-record headers for effects and for the top-of-screen HUD.
+	sprite_memory[17'h01800]=16'h8001;
+	sprite_memory[17'h00404]=16'h001e;
+	sprite_memory[17'h00405]=16'h0001;
+	sprite_memory[17'h00406]=16'h0020;
+	sprite_memory[17'h00407]=16'h0000;
+	reset<=1;
+	repeat(3) @(posedge clk);
+	reset<=0;
+	@(posedge clk); ce_pix<=1; h_count<=0; v_count<=253;
+	@(posedge clk); ce_pix<=0; h_count<=1;
+	wait(busy);
+	wait(!busy && dut.state==dut.R_IDLE);
+	@(posedge clk);
+	for(i=0;i<8;i=i+1) begin
+		if(line_buffer1_at(10+i) !== (15'h0011+i))
+			$fatal(1,"first multi-record pixel %0d=%h",i,line_buffer1_at(10+i));
+		if(line_buffer1_at(30+i) !== (15'h0011+i))
+			$fatal(1,"second multi-record pixel %0d=%h",i,line_buffer1_at(30+i));
+	end
+
+	// A second header is how independent layers, including the HUD, enter
+	// the list. Keep both across the header-to-header scan transition.
+	sprite_memory[17'h01800]=16'h0000;
+	sprite_memory[17'h01804]=16'h8000;
+	sprite_memory[17'h01805]=16'h0000;
+	sprite_memory[17'h01806]=16'h0000;
+	sprite_memory[17'h01807]=16'h0101;
+	reset<=1;
+	repeat(3) @(posedge clk);
+	reset<=0;
+	@(posedge clk); ce_pix<=1; h_count<=0; v_count<=253;
+	@(posedge clk); ce_pix<=0; h_count<=1;
+	wait(busy);
+	wait(!busy && dut.state==dut.R_IDLE);
+	@(posedge clk);
+	for(i=0;i<8;i=i+1) begin
+		if(line_buffer1_at(10+i) !== (15'h0011+i))
+			$fatal(1,"first header pixel %0d=%h",i,line_buffer1_at(10+i));
+		if(line_buffer1_at(30+i) !== (15'h0011+i))
+			$fatal(1,"second header pixel %0d=%h",i,line_buffer1_at(30+i));
+	end
+
+	// A real dense attract frame uses 40 list headers. The last header must
+	// still be scanned after the private list grows beyond the old 32 cap.
+	for(i=0;i<40;i=i+1) begin
+		sprite_memory[17'h01800+i*4]= (i==39) ? 16'h8000 : 16'h0000;
+		sprite_memory[17'h01801+i*4]=16'h0000;
+		sprite_memory[17'h01802+i*4]=16'h0000;
+		sprite_memory[17'h01803+i*4]=16'h0100+i;
+		sprite_memory[17'h00400+i*4]=16'h001e;
+		sprite_memory[17'h00401+i*4]= (i==39) ? 16'h0001 : 16'h0100;
+		sprite_memory[17'h00402+i*4]=16'h0020;
+		sprite_memory[17'h00403+i*4]=16'h0000;
+	end
+	reset<=1;
+	repeat(3) @(posedge clk);
+	reset<=0;
+	@(posedge clk); ce_pix<=1; h_count<=0; v_count<=253;
+	@(posedge clk); ce_pix<=0; h_count<=1;
+	wait(busy);
+	wait(!busy && dut.state==dut.R_IDLE);
+	@(posedge clk);
+	for(i=0;i<8;i=i+1)
+		if(line_buffer1_at(30+i) !== (15'h0011+i))
+			$fatal(1,"late header pixel %0d=%h",i,line_buffer1_at(30+i));
+
 	// Replace it with a 16-pixel-wide floating tilemap window. A -16
 	// scroll value cancels the controller's documented +0x10 origin.
+	sprite_memory[17'h01800]=16'h8000;
+	sprite_memory[17'h01804]=16'h0000;
 	sprite_memory[17'h01803]=16'h8100;
 	sprite_memory[17'h00400]=16'h040a;
 	sprite_memory[17'h00401]=16'h0001;
@@ -336,23 +507,8 @@ initial begin
 			repeat(3) @(negedge clk);
 		end
 	end
-	// A frame-boundary sprite copy must not flush a completed HUD/playfield
-	// row. Only the row under construction can be discarded and retried.
-	retained_bank = dut.display_bank;
-	retained_line = dut.bank_line[retained_bank];
-	retained_work_bank = dut.work_bank;
-	retained_work_valid = dut.bank_valid[retained_work_bank] && !busy;
-	if (!dut.bank_valid[retained_bank])
-		$fatal(1, "no completed row available before sprite copy");
-	sprite_copy_busy = 1'b1;
-	repeat (3) @(posedge clk);
-	#1;
-	if (!dut.scheduler_started || !dut.bank_valid[retained_bank]
-	    || dut.bank_line[retained_bank] != retained_line
-	    || (retained_work_valid && !dut.bank_valid[retained_work_bank])
-	    || busy || dut.state != dut.R_IDLE)
-		$fatal(1, "sprite copy discarded a completed raster row");
-	sprite_copy_busy = 1'b0;
+	// The sprite-RAM regression separately verifies that list DMA leaves the
+	// renderer port live; this scheduler never aborts a line on copy activity.
 	// The packed-list buffer ends before record 0x600. A saturated private
 	// header pointer must not make the renderer interpret base headers as
 	// descriptor data when the original list overloads that buffer.

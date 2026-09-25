@@ -73,12 +73,19 @@ initial begin
 
 	// The private list is empty until the DX-101 buffer transaction fires.
 	expect_record(17'h01800, 64'd0);
+	video_address <= 17'h02040;
+	repeat (2) @(posedge clk);
 	buffer_trigger <= 1'b1;
 	@(posedge clk);
 	buffer_trigger <= 1'b0;
 	@(posedge clk);
 	if (!buffer_busy) $fatal(1, "buffer transaction did not start");
-	while (buffer_busy) @(posedge clk);
+	while (buffer_busy) begin
+		@(posedge clk);
+		#1;
+		if (video_q !== 64'hc003_c002_c001_c000)
+			$fatal(1, "copy hijacked the renderer read port: %h", video_q);
+	end
 	repeat (2) @(posedge clk);
 
 	// Header pointers are rewritten to packed record indices 0 and 2.
@@ -94,9 +101,29 @@ initial begin
 	write_word(17'h00003, 16'hd00d);
 	expect_record(17'h00000, 64'hd00d_a002_a001_a000);
 
+	// The attract game can issue 40 headers in one buffered list. Header 39
+	// must survive; a 32-entry cap truncates the late foreground/HUD groups.
+	for (header = 0; header < 40; header = header + 1) begin
+		write_word(17'h01800 + header * 4 + 0,
+			(header == 39) ? 16'h8000 : 16'h0000);
+		write_word(17'h01800 + header * 4 + 1, header);
+		write_word(17'h01800 + header * 4 + 2, 16'h0080);
+		write_word(17'h01800 + header * 4 + 3, 16'h8800);
+	end
+	buffer_trigger <= 1'b1;
+	@(posedge clk);
+	buffer_trigger <= 1'b0;
+	@(posedge clk);
+	if (!buffer_busy) $fatal(1, "40-header transaction did not start");
+	while (buffer_busy) @(posedge clk);
+	repeat (2) @(posedge clk);
+	expect_record(17'h0187c, 64'h801f_0080_001f_0000);
+	expect_record(17'h0189c, 64'h8027_0080_0027_8000);
+	expect_record(17'h0009c, 64'ha003_a002_a001_dddd);
+
 	// An early boot trigger may see an unfinished all-zero base list. The
 	// hardware scan must terminate instead of holding the CPU forever.
-	for (header = 0; header < 32; header = header + 1) begin
+	for (header = 0; header < 128; header = header + 1) begin
 		write_word(17'h01800 + header * 4 + 0, 16'h0000);
 		write_word(17'h01800 + header * 4 + 1, 16'h0000);
 		write_word(17'h01800 + header * 4 + 2, 16'h0000);
@@ -109,7 +136,7 @@ initial begin
 	if (!buffer_busy) $fatal(1, "unterminated transaction did not start");
 	while (buffer_busy) @(posedge clk);
 	repeat (2) @(posedge clk);
-	expect_record(17'h0187c, 64'h001f_0000_0000_8000);
+	expect_record(17'h019fc, 64'h007f_0000_0000_8000);
 
 	// Seven 256-record headers exceed the 0x600-record packed destination.
 	// The seventh pointer must saturate, and descriptor writes must not

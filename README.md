@@ -1,6 +1,6 @@
 # Arcade: Guardians / Denjin Makai II for MiSTer
 
-Version 1.2.1 is a native FPGA implementation of
+Version 1.3.0 is a native FPGA implementation of
 Winkysoft's 1995 arcade game,
 licensed to Banpresto,
 *Guardians / Denjin Makai II* for the MiSTer DE10-Nano platform.
@@ -112,10 +112,8 @@ The release was built with Quartus Prime Lite 17.0 for the Cyclone V
 quartus_sh --flow compile Arcade-Guardians
 ```
 
-The replacement 1.2.1 build closes every analyzed timing class with no
-violations. Overall worst setup slack is +0.497 ns, worst hold slack is
-+0.194 ns, worst recovery slack is +2.956 ns, and worst removal slack is
-+0.760 ns.
+The v1.3.0 release build closes all analyzed setup, hold, recovery, and
+removal timing classes; exact results are recorded in its GitHub release notes.
 
 ## Tests
 
@@ -147,19 +145,28 @@ post-explosion sequence. The replacement build adds the MRA cheat interface;
 its loader, code matching, big-endian byte lanes, and MRA format are covered by
 focused simulation and a clean full Quartus build.
 
-The unreleased fast-boot path differs from the original power-on sequence:
+The v1.3.0 fast-boot path differs from the original power-on sequence:
 the FPGA clears work and auxiliary RAM before the 68000 starts, then supplies
 the verified program checksum and skips the long destructive RAM exercise in
 the streamed program image. The original ZIP and MRA CRC checks are unchanged.
 The game still displays `ROM CHECK SUM..OK` and `RAM ACCESS..OK`, but these
 labels no longer mean that the 68000 executed the full original test loops.
 This patch is confined to startup; it is not a gameplay turbo mode. ROM
-loading displays black, not the former diagnostic gradient.
+loading displays black, not the former diagnostic gradient. The v1.3.0 MRA
+stages ROM #0 directly in MiSTer's DDR and replays it through the existing
+loader; older streaming MRAs remain supported. The
+core's graphics and game-data storage layout is unchanged. On the tested
+MiSTer, remote launch-to-new-command-FIFO time fell from 22.3 seconds to 5.4-5.5
+seconds; total first-screen time improved by roughly 17 seconds. This timing
+is a local measurement, not a guaranteed transfer speed on every setup.
 
-The renderer now keeps completed scanlines while the DX-101 repacks its
-sprite list, instead of clearing all line buffers at each copy. This targets
-reported intermittent HUD disappearance during busy demo scenes; hardware
-validation is still in progress.
+The DX-101 list copy now uses the CPU-side sprite-RAM port while the 68000 is
+held. The renderer keeps its own read port and does not discard a scanline at
+each copy. Native-resolution MiSTer captures verified the flame-kick intro
+without the former horizontal bands, including the first striped frame and
+the later full-screen fire. The history collector now excludes tilemap writes
+from packed-list scroll replay. These captures do not establish exact
+original-PCB sprite-overload behavior.
 
 Sprite-list overflow is protected against corruption of the base-list headers.
 Exact original-PCB sprite-overload behavior has not yet been established: the

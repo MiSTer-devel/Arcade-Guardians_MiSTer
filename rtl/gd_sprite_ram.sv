@@ -29,11 +29,15 @@ logic [15:0] video_bank_q [0:3];
 // records during raster IRQs. A simple vblank snapshot is not equivalent: it
 // can bisect the game's multiword rewrite and retain complete 64-line bands
 // from the preceding scene.
-logic [63:0] private_headers [0:31];
+// Dense gameplay exceeds 32 display-list groups (40 were observed in the
+// attract demo). Keep enough private headers for those late HUD/foreground
+// groups; the hardware's private area can hold many more than 32.
+localparam int PRIVATE_HEADER_COUNT = 128;
+logic [63:0] private_headers [0:PRIVATE_HEADER_COUNT-1];
 logic [63:0] private_video_q;
 logic        private_video_select;
 logic        private_video_select_q;
-logic  [4:0] private_video_index;
+logic  [6:0] private_video_index;
 integer private_index;
 
 typedef enum logic [2:0] {
@@ -41,7 +45,7 @@ typedef enum logic [2:0] {
 	C_DESCRIPTOR_WAIT, C_DESCRIPTOR_CAPTURE
 } copy_state_t;
 copy_state_t copy_state;
-logic  [4:0] copy_header_index;
+logic  [6:0] copy_header_index;
 logic  [8:0] copy_descriptors_remaining;
 logic [16:0] copy_read_address;
 logic [14:0] copy_dest_record;
@@ -54,27 +58,29 @@ assign buffer_busy = (copy_state != C_IDLE);
 // pointer also leaves later private headers outside the valid packed range.
 wire copy_record_write = (copy_state == C_DESCRIPTOR_CAPTURE)
 	&& (copy_dest_record < PACKED_RECORD_LIMIT);
+// The list-copy bus master owns the CPU port while the 68000 is held. Never
+// steal the video read port: the renderer can still be drawing a scanline
+// during a buffer transaction (notably the intro fire trail and HUD).
 wire [14:0] bank_cpu_address = copy_record_write
-	? copy_dest_record : address[16:2];
-wire [16:0] bank_video_address = buffer_busy
-	? copy_read_address : video_address;
+	? copy_dest_record : (buffer_busy ? copy_read_address[16:2] : address[16:2]);
+wire [16:0] bank_video_address = video_address;
 
 always_ff @(posedge clk) begin
 	if (reset) begin
 		copy_state <= C_IDLE;
-		copy_header_index <= 5'd0;
+		copy_header_index <= 7'd0;
 		copy_descriptors_remaining <= 9'd0;
 		copy_read_address <= 17'd0;
 		copy_dest_record <= 15'd0;
 		copy_last_header <= 1'b0;
-		for (private_index = 0; private_index < 32;
+		for (private_index = 0; private_index < PRIVATE_HEADER_COUNT;
 		     private_index = private_index + 1)
 			private_headers[private_index] <= 64'd0;
 	end
 	else begin
 		case (copy_state)
 			C_IDLE: if (buffer_trigger) begin
-				copy_header_index <= 5'd0;
+				copy_header_index <= 7'd0;
 				copy_dest_record <= 15'd0;
 				copy_read_address <= 17'h01800;
 				copy_state <= C_HEADER_WAIT;
@@ -82,20 +88,20 @@ always_ff @(posedge clk) begin
 			C_HEADER_WAIT: copy_state <= C_HEADER_CAPTURE;
 			C_HEADER_CAPTURE: begin
 				private_headers[copy_header_index] <= {
-					video_bank_q[3][15], copy_dest_record,
-					video_bank_q[2], video_bank_q[1],
-					video_bank_q[0]
-						| ((copy_header_index == 5'd31)
+					bank_q[3][15], copy_dest_record,
+					bank_q[2], bank_q[1],
+					bank_q[0]
+						| ((copy_header_index == PRIVATE_HEADER_COUNT-1)
 							? 16'h8000 : 16'd0)
 				};
 				// Early boot can trigger buffering before software has planted
 				// an end marker. Bound the private table and synthesize one in
 				// its last slot, matching the finite hardware/MAME scan.
-				copy_last_header <= video_bank_q[0][15]
-					|| (copy_header_index == 5'd31);
+				copy_last_header <= bank_q[0][15]
+					|| (copy_header_index == PRIVATE_HEADER_COUNT-1);
 				copy_descriptors_remaining
-					<= {1'b0, video_bank_q[0][7:0]} + 9'd1;
-				copy_read_address <= {video_bank_q[3][14:0], 2'b00};
+					<= {1'b0, bank_q[0][7:0]} + 9'd1;
+				copy_read_address <= {bank_q[3][14:0], 2'b00};
 				copy_state <= C_DESCRIPTOR_WAIT;
 			end
 			C_DESCRIPTOR_WAIT: copy_state <= C_DESCRIPTOR_CAPTURE;
@@ -106,9 +112,9 @@ always_ff @(posedge clk) begin
 					if (copy_last_header)
 						copy_state <= C_IDLE;
 					else begin
-						copy_header_index <= copy_header_index + 5'd1;
+						copy_header_index <= copy_header_index + 7'd1;
 						copy_read_address <= 17'h01800
-							+ {(copy_header_index + 5'd1), 2'b00};
+							+ {(copy_header_index + 7'd1), 2'b00};
 						copy_state <= C_HEADER_WAIT;
 					end
 				end
@@ -126,8 +132,8 @@ end
 
 always_comb begin
 	private_video_select = (video_address >= 17'h01800)
-		&& (video_address <= 17'h0187c);
-	private_video_index = video_address[6:2];
+		&& (video_address <= 17'h019fc);
+	private_video_index = video_address[8:2];
 	case (address[1:0])
 		2'd0: q = bank_q[0];
 		2'd1: q = bank_q[1];
@@ -169,7 +175,7 @@ generate
 		) bank_ram (
 			.clock0(clk), .clock1(video_clk), .address_a(bank_cpu_address),
 			.address_b(bank_video_address[16:2]),
-			.data_a(copy_record_write ? video_bank_q[ram_bank] : data),
+			.data_a(copy_record_write ? bank_q[ram_bank] : data),
 			.data_b(16'd0),
 			.byteena_a(copy_record_write ? 2'b11 : byte_enable),
 			.byteena_b(2'b11),
@@ -184,10 +190,10 @@ logic [15:0] bank_memory [0:3][0:32767];
 
 always_ff @(posedge clk) begin
 	if (copy_record_write) begin
-		bank_memory[0][copy_dest_record] <= video_bank_q[0];
-		bank_memory[1][copy_dest_record] <= video_bank_q[1];
-		bank_memory[2][copy_dest_record] <= video_bank_q[2];
-		bank_memory[3][copy_dest_record] <= video_bank_q[3];
+		bank_memory[0][copy_dest_record] <= bank_q[0];
+		bank_memory[1][copy_dest_record] <= bank_q[1];
+		bank_memory[2][copy_dest_record] <= bank_q[2];
+		bank_memory[3][copy_dest_record] <= bank_q[3];
 	end
 	else if (write) begin
 		if (byte_enable[1])

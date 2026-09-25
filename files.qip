@@ -14,6 +14,8 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/gd_sprite_ram.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/gd_gfx_arbiter.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/gd_sdram.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/gd_rom_loader.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/gd_wide_rom_adapter.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/gd_ddr_preload_replay.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/gd_ddr_memory.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/gd_x1_010.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/gd_dx101_video.sv

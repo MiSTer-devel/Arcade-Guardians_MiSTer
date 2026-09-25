@@ -18,7 +18,6 @@ module gd_dx101_video
 (
 	input  logic        clk,
 	input  logic        reset,
-	input  logic        sprite_copy_busy,
 	input  logic        ce_pix,
 	input  logic  [8:0] h_count,
 	input  logic  [8:0] v_count,
@@ -28,6 +27,11 @@ module gd_dx101_video
 	input  logic        rowscroll_override_valid,
 	input  logic [14:0] rowscroll_override_record,
 	input  logic [15:0] rowscroll_override_data,
+	input  logic        rowscroll_seed_valid,
+	input  logic [15:0] rowscroll_seed_data,
+	input  logic        rowscroll_live_valid,
+	input  logic [14:0] rowscroll_live_record,
+	input  logic [15:0] rowscroll_live_data,
 	input  logic [15:0] video_control,
 	input  logic        rotate_180,
 	input  logic [26:0] video_x_offset,
@@ -517,15 +521,99 @@ endfunction
 wire scan_record_visible = sprite_intersects_line(
 	h0, h1, h2, h3, scan_record_q[15:0], scan_record_q[31:16],
 	logical_target_line, video_y_offset, video_y_zoom);
+// The intro fire trail raster-scrolls several four-record tilemap groups.
+// The first plane uses packed records 12..23; the later full-screen plane uses
+// 69..79. Its target moves between groups as the animation advances, and the
+// current descriptor's page can still be the unmodified source page when this
+// look-ahead renderer reaches it. Reuse the preceding frame's per-line trace
+// within the same plane. The later group's base moves by three records at one
+// transition, so its matching cannot rely on the record's low two bits; only
+// the descriptor covering the requested 64-line window is made active.
+wire scan_rowscroll_fire_low =
+    (sprite_pointer[16:2] >= 15'd12)
+    && (sprite_pointer[16:2] <= 15'd23)
+    && (rowscroll_override_record >= 15'd12)
+    && (rowscroll_override_record <= 15'd23)
+    && (sprite_pointer[3:2] == rowscroll_override_record[1:0]);
+wire scan_rowscroll_fire_high =
+    (sprite_pointer[16:2] >= 15'd69)
+    && (sprite_pointer[16:2] <= 15'd79)
+    && (rowscroll_override_record >= 15'd69)
+    && (rowscroll_override_record <= 15'd79);
+// The full-screen fire plane is first packed at 69..72 immediately after the
+// preceding frame's 12..15 group. It is the same raster surface at a new list
+// address, so bridge that single transition by the visible 64-line window.
+wire scan_rowscroll_fire_bridge =
+    (sprite_pointer[16:2] >= 15'd69)
+    && (sprite_pointer[16:2] <= 15'd72)
+    && (rowscroll_override_record >= 15'd12)
+    && (rowscroll_override_record <= 15'd15);
+// On the first striped kick frame the game changes records 16..19 from its
+// packed page 24 to page 30 with raster writes. The speculative renderer can
+// see page 24 before that frame's CPU writes; the prior trace is still the
+// correct per-line page/scroll and must win over the stale packed descriptor.
+wire scan_rowscroll_fire_early_record =
+    (scan_record_q[47:42] == 6'd24)
+    && (sprite_pointer[16:2] >= 15'd16)
+    && (sprite_pointer[16:2] <= 15'd19);
+wire scan_rowscroll_fire_early_page = scan_rowscroll_fire_early_record
+    && (rowscroll_override_record >= 15'd16)
+    && (rowscroll_override_record <= 15'd19);
+wire scan_rowscroll_fire_header =
+	(h0[10:8] == 3'd5)
+	&& (h1[9:0] == 10'h070) && (h2[8:0] == 9'h080)
+	&& (scan_record_q[15:0] == 16'h5000)
+	&& (scan_record_q[31:26] == 6'h03);
+wire scan_rowscroll_fire_plane = scan_rowscroll_fire_header
+	&& (((scan_record_q[47:42] >= 6'd29)
+	     && (scan_record_q[47:42] <= 6'd31))
+	    || scan_rowscroll_fire_early_page)
+	&& (rowscroll_override_data[15:10] >= 6'd29)
+	&& (rowscroll_override_data[15:10] <= 6'd31)
+	&& (scan_rowscroll_fire_low || scan_rowscroll_fire_high
+	    || scan_rowscroll_fire_bridge);
+// The first active frame can have no per-line history for a late-packed
+// 64-line chunk. Its preceding frame still provides the line-zero fire page
+// and scroll. Use that scalar seed for an unwritten page-24 chunk instead of
+// exposing the wrong tilemap page as a rectangular band.
+wire scan_rowscroll_fire_seed = rowscroll_seed_valid && h3[15]
+	&& scan_rowscroll_fire_header && scan_rowscroll_fire_early_record
+	&& (rowscroll_seed_data[15:10] >= 6'd29)
+	&& (rowscroll_seed_data[15:10] <= 6'd31);
 wire scan_rowscroll_target = rowscroll_override_valid
 	// Raster IRQ writes happen after the DX-101 has packed the display list into
 	// low sprite RAM. The captured address is therefore the packed destination
 	// record, exactly the identity carried by sprite_pointer while scanning the
 	// rewritten private headers. Stage 1 writes packed records 2 and 3.
 	&& h3[15]
-	&& (sprite_pointer[16:2] == rowscroll_override_record);
+	&& ((sprite_pointer[16:2] == rowscroll_override_record)
+	    || scan_rowscroll_fire_plane)
+	// A packed slot can be reused by a different scene in the next frame.
+	// Replay its prior scroll only if the tilemap page and tile-size bits
+	// still identify the same kind of floating layer.
+	&& ((scan_record_q[47:42] == rowscroll_override_data[15:10])
+	    || scan_rowscroll_fire_plane);
+// On the very first kick frame there is no preceding-frame raster trace at
+// all. The raster handler has already written earlier lines in this frame;
+// use its most recent word for the same fire plane until frozen history exists.
+// This keeps the early tilemap chunks on the intended graphics page instead
+// of exposing the speculative renderer's partially updated packed list.
+wire scan_rowscroll_fire_live = !rowscroll_override_valid
+	&& rowscroll_live_valid && h3[15] && scan_rowscroll_fire_header
+	&& (sprite_pointer[16:2] >= 15'd16)
+    && (sprite_pointer[16:2] <= 15'd19)
+    && (rowscroll_live_record >= 15'd16)
+    && (rowscroll_live_record <= 15'd19)
+	&& ((scan_record_q[47:42] == 6'd24)
+	    || ((scan_record_q[47:42] >= 6'd29)
+	        && (scan_record_q[47:42] <= 6'd31)))
+	&& (rowscroll_live_data[15:10] >= 6'd29)
+	&& (rowscroll_live_data[15:10] <= 6'd31);
 wire [15:0] scan_s2 = scan_rowscroll_target
-	? rowscroll_override_data : scan_record_q[47:32];
+	? rowscroll_override_data
+	: scan_rowscroll_fire_live ? rowscroll_live_data
+	: scan_rowscroll_fire_seed ? rowscroll_seed_data
+	: scan_record_q[47:32];
 wire [127:0] scan_record_data = {
 	h0, h1, h2, h3,
 	scan_record_q[15:0], scan_record_q[31:16],
@@ -545,7 +633,8 @@ always_ff @(posedge clk) begin
 	if ((state == R_SPRITE_CAPTURE) && scan_record_visible
 	    && (active_count < 8'd128))
 		active_records[active_count] <= {
-			scan_rowscroll_target, scan_record_data
+			(scan_rowscroll_target || scan_rowscroll_fire_live
+			 || scan_rowscroll_fire_seed), scan_record_data
 		};
 	if (state == R_ACTIVE_LOAD)
 		active_record_q <= active_records[active_index];
@@ -734,8 +823,6 @@ always_ff @(posedge clk) begin
 				if (display_bank != selected_bank)
 					bank_valid[display_bank] <= 1'b0;
 				display_bank <= selected_bank;
-				if (scheduler_started && !(|display_match))
-					missed_lines <= missed_lines + 16'd1;
 			end
 			else if (scheduler_started)
 				missed_lines <= missed_lines + 16'd1;
@@ -769,17 +856,9 @@ always_ff @(posedge clk) begin
 				next_render_line <= recovery_render_line;
 		end
 
-		// The controller repacks its private sprite list at frame boundaries.
-		// The video RAM port is unavailable during that copy. Abort only the
-		// in-flight row; completed line banks remain valid for display. A full
-		// renderer reset here discards the entire look-ahead reservoir and can
-		// blank the HUD while the lower playfield continues rendering.
-		if (sprite_copy_busy) begin
-			state <= R_IDLE;
-			busy <= 1'b0;
-			if (busy) bank_valid[work_bank] <= 1'b0;
-		end
-		else case (state)
+		// Sprite-list DMA now reads on the CPU RAM port. The renderer owns the
+		// video port continuously, so a copy must not abort its in-flight row.
+		case (state)
 			R_IDLE: begin
 				// Keep up to twelve completed rows ahead. This absorbs the clustered
 				// tile-cache misses from wide floating layers instead of repeating

@@ -90,12 +90,30 @@ logic [63:0] loader_gfx_burst_data;
 logic loader_gfx_rnw;
 logic loader_gfx_req;
 logic loader_gfx_ack;
+logic loader_downloading;
+logic loader_wr;
+logic [26:0] loader_addr;
+logic [7:0] loader_data;
+logic loader_wait;
+logic [25:0] preload_addr;
+logic preload_req;
+logic [63:0] preload_data;
+logic preload_ack;
+
+gd_ddr_preload_replay preload_replay
+(
+	.clk, .reset(cold_reset),
+	.hps_downloading(rom_downloading), .hps_wr(rom_wr),
+	.hps_addr(rom_addr), .hps_data(rom_data), .hps_wait(rom_wait),
+	.loader_downloading, .loader_wr, .loader_addr, .loader_data,
+	.loader_wait, .preload_addr, .preload_req, .preload_data, .preload_ack
+);
 
 gd_rom_loader loader
 (
-	.clk, .reset(cold_reset), .memory_ready, .downloading(rom_downloading),
-	.ioctl_wr(rom_wr), .ioctl_addr(rom_addr), .ioctl_data(rom_data),
-	.ioctl_wait(rom_wait), .ddr_load_wr, .ddr_load_addr, .ddr_load_data,
+	.clk, .reset(cold_reset), .memory_ready, .downloading(loader_downloading),
+	.ioctl_wr(loader_wr), .ioctl_addr(loader_addr), .ioctl_data(loader_data),
+	.ioctl_wait(loader_wait), .ddr_load_wr, .ddr_load_addr, .ddr_load_data,
 	.ddr_load_wait, .ddr_load_idle, .gfx_addr(loader_gfx_addr),
 	.gfx_din(loader_gfx_din), .gfx_be(loader_gfx_be),
 	.gfx_burst(loader_gfx_burst), .gfx_burst_data(loader_gfx_burst_data),
@@ -124,6 +142,7 @@ gd_ddr_memory rom_memory
 	.clk, .reset(cold_reset), .load_wr(ddr_load_wr),
 	.load_addr(ddr_load_addr), .load_data(ddr_load_data),
 	.load_wait(ddr_load_wait), .load_idle(ddr_load_idle),
+	.preload_addr, .preload_req, .preload_data, .preload_ack,
 	.cpu_addr(cpu_rom_addr), .cpu_req(cpu_rom_req),
 	.cpu_dout(cpu_rom_dout), .cpu_ack(cpu_rom_ack),
 	.sound_addr(sound_rom_addr), .sound_req(sound_rom_req),
@@ -137,7 +156,7 @@ gd_ddr_memory rom_memory
 	.ddr_dout_ready, .ddr_rd, .ddr_din, .ddr_be, .ddr_we
 );
 
-wire runtime_reset = reset || !memory_ready || !rom_ready || rom_downloading;
+wire runtime_reset = reset || !memory_ready || !rom_ready || loader_downloading;
 logic raster_irq;
 logic [15:0] video_control;
 logic [26:0] video_x_offset;
@@ -224,6 +243,11 @@ logic [8:0] rowscroll_lookup_line;
 logic rowscroll_override_valid;
 logic [14:0] rowscroll_override_record;
 logic [15:0] rowscroll_override_data;
+logic rowscroll_seed_valid;
+logic [15:0] rowscroll_seed_data;
+logic rowscroll_live_valid;
+logic [14:0] rowscroll_live_record;
+logic [15:0] rowscroll_live_data;
 logic [15:0] unused_loader_dout;
 
 gd_rowscroll_history rowscroll_history
@@ -237,12 +261,17 @@ gd_rowscroll_history rowscroll_history
 	.lookup_line(rowscroll_lookup_line),
 	.lookup_valid(rowscroll_override_valid),
 	.lookup_record(rowscroll_override_record),
-	.lookup_data(rowscroll_override_data)
+	.lookup_data(rowscroll_override_data),
+	.lookup_seed_valid(rowscroll_seed_valid),
+	.lookup_seed_data(rowscroll_seed_data),
+	.lookup_live_valid(rowscroll_live_valid),
+	.lookup_live_record(rowscroll_live_record),
+	.lookup_live_data(rowscroll_live_data)
 );
 
 gd_gfx_arbiter gfx_arbiter
 (
-	.clk, .reset(cold_reset), .cache_flush(rom_downloading),
+	.clk, .reset(cold_reset), .cache_flush(loader_downloading),
 	.loader_addr(loader_gfx_addr),
 	.loader_din(loader_gfx_din), .loader_be(loader_gfx_be),
 	.loader_burst(loader_gfx_burst),
@@ -262,12 +291,14 @@ gd_gfx_arbiter gfx_arbiter
 
 gd_dx101_video #(.AHEAD_RENDER(1'b1)) video
 (
-	.clk, .reset(runtime_reset), .sprite_copy_busy(sprite_buffer_busy),
+	.clk, .reset(runtime_reset),
 	.ce_pix, .h_count, .v_count,
 	.hblank, .vblank, .raster_active(raster_enable[0]), .video_control,
 	.rotate_180,
 	.rowscroll_override_valid, .rowscroll_override_record,
-	.rowscroll_override_data,
+	.rowscroll_override_data, .rowscroll_seed_valid,
+	.rowscroll_seed_data, .rowscroll_live_valid,
+	.rowscroll_live_record, .rowscroll_live_data,
 	.video_x_offset, .video_x_zoom, .video_y_offset, .video_y_zoom,
 	.sprite_address(sprite_video_address),
 	.sprite_q(sprite_video_q),

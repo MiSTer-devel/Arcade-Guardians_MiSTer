@@ -23,7 +23,12 @@ module gd_rowscroll_history
 	input  logic  [8:0] lookup_line,
 	output logic        lookup_valid,
 	output logic [14:0] lookup_record,
-	output logic [15:0] lookup_data
+	output logic [15:0] lookup_data,
+	output logic        lookup_seed_valid,
+	output logic [15:0] lookup_seed_data,
+	output logic        lookup_live_valid,
+	output logic [14:0] lookup_live_record,
+	output logic [15:0] lookup_live_data
 );
 
 // Raster positions are programmed 0, 2, ... 230, and each scroll word is
@@ -34,14 +39,23 @@ module gd_rowscroll_history
 (* ramstyle = "MLAB" *) logic [15:0] data_bank1 [0:115];
 logic [115:0] valid_bank0;
 logic [115:0] valid_bank1;
+logic seed_valid_bank0;
+logic seed_valid_bank1;
+logic [15:0] seed_data_bank0;
+logic [15:0] seed_data_bank1;
 logic write_bank;
 logic read_bank;
+logic raster_seen_this_frame;
 wire [6:0] write_index = raster_position[7:1];
 wire [6:0] read_index = lookup_line[7:1];
 
 // Packed descriptors are four 16-bit words.  Only word 2 is the floating
 // tilemap X-scroll/page word changed by Guardians' raster handler.
 wire capture_write = capture_enable && write
+	// Only the packed display list occupies word addresses below 0x1800.
+	// Tilemap RAM also receives word-2 writes during raster mode; recording
+	// those as scrolls overwrites both the live word and frozen row history.
+	&& (write_address < 17'h01800)
 	&& (write_address[1:0] == 2'd2)
 	&& (write_byte_enable == 2'b11)
 	&& !raster_position[0] && (raster_position < 9'd232);
@@ -50,20 +64,44 @@ always_ff @(posedge clk) begin
 	if (reset) begin
 		valid_bank0 <= 116'd0;
 		valid_bank1 <= 116'd0;
+		seed_valid_bank0 <= 1'b0;
+		seed_valid_bank1 <= 1'b0;
+		seed_data_bank0 <= 16'd0;
+		seed_data_bank1 <= 16'd0;
+		lookup_live_valid <= 1'b0;
+		lookup_live_record <= 15'd0;
+		lookup_live_data <= 16'd0;
 		write_bank <= 1'b0;
 		read_bank <= 1'b1;
+		raster_seen_this_frame <= 1'b0;
 	end
 	else begin
+		// The handler clears and re-enables the raster IRQ between successive
+		// writes. Keep the frozen history readable between those brief pulses;
+		// otherwise speculative rows can fall back to a stale packed page.
+		if (capture_enable)
+			raster_seen_this_frame <= 1'b1;
 		if (capture_write) begin
+			lookup_live_valid <= 1'b1;
+			lookup_live_record <= write_address[16:2];
+			lookup_live_data <= write_data;
 			if (!write_bank) begin
 				record_bank0[write_index] <= write_address[16:2];
 				data_bank0[write_index] <= write_data;
 				valid_bank0[write_index] <= 1'b1;
+				if (write_index == 7'd0) begin
+					seed_valid_bank0 <= 1'b1;
+					seed_data_bank0 <= write_data;
+				end
 			end
 			else begin
 				record_bank1[write_index] <= write_address[16:2];
 				data_bank1[write_index] <= write_data;
 				valid_bank1[write_index] <= 1'b1;
+				if (write_index == 7'd0) begin
+					seed_valid_bank1 <= 1'b1;
+					seed_data_bank1 <= write_data;
+				end
 			end
 		end
 
@@ -72,10 +110,16 @@ always_ff @(posedge clk) begin
 		if (ce_pix && (h_count == 9'd0) && (v_count == 9'd232)) begin
 			read_bank <= write_bank;
 			write_bank <= ~write_bank;
-			if (write_bank)
+			raster_seen_this_frame <= 1'b0;
+			lookup_live_valid <= 1'b0;
+			if (write_bank) begin
 				valid_bank0 <= 116'd0;
-			else
+				seed_valid_bank0 <= 1'b0;
+			end
+			else begin
 				valid_bank1 <= 116'd0;
+				seed_valid_bank1 <= 1'b0;
+			end
 		end
 	end
 end
@@ -84,7 +128,18 @@ always_comb begin
 	lookup_valid = 1'b0;
 	lookup_record = 15'd0;
 	lookup_data = 16'd0;
-	if (capture_enable && (lookup_line < 9'd232)) begin
+	lookup_seed_valid = 1'b0;
+	lookup_seed_data = 16'd0;
+	if (!read_bank) begin
+		lookup_seed_valid = seed_valid_bank0;
+		lookup_seed_data = seed_data_bank0;
+	end
+	else begin
+		lookup_seed_valid = seed_valid_bank1;
+		lookup_seed_data = seed_data_bank1;
+	end
+	if ((capture_enable || raster_seen_this_frame)
+	    && (lookup_line < 9'd232)) begin
 		if (!read_bank) begin
 			lookup_valid = valid_bank0[read_index];
 			lookup_record = record_bank0[read_index];

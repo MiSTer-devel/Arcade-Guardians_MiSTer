@@ -1,7 +1,25 @@
 # Changelog
 
-## Unreleased
+## 1.3.0 - 2026-09-25
 
+- Restricted raster-scroll history to the DX-101 packed display-list range.
+  Tilemap RAM writes during the flame-kick IRQ sequence no longer displace
+  live scroll words or pollute the next frame's history. Verified the first
+  striped kick frame and later full-screen fire frames with consecutive
+  native-resolution MiSTer captures; removed temporary pixel probes.
+- Raised the DX-101 private display-list limit from 32 to 128 headers. The
+  attract demo can author 40 groups; the old forced end marker omitted its
+  late full-screen overlay and made the top HUD disappear under load. Added
+  40-header copy and scanout regressions and verified the previously blank
+  79.65-second demo frame on MiSTer.
+- Added a direct-to-DDR MRA staging path, adapted from Martin Donlon's PGM
+  loader design. After MiSTer deposits ROM #0 at `0x30000000`, the FPGA reads
+  it back in 64-bit words and feeds the existing program/graphics/sample
+  loader. MRAs without direct DDR staging still use the original stream.
+- Enabled MiSTer's 16-bit file-transfer mode. A back-pressured adapter feeds
+  both bytes, in order, into the established byte-oriented ROM loader; DIP
+  and MRA-cheat downloads now consume wide words directly. This targets the
+  measured ~40-second `SENDING ROM #0` phase without changing the ROM ZIP.
 - Replaced the old loading gradient/telemetry path with a black screen until
   the game CPU begins fetching program ROM.
 - Shortened post-transfer startup by substituting the known-good program
@@ -9,9 +27,13 @@
   The FPGA clears the same work/auxiliary RAM areas before releasing the CPU,
   including on soft reset. The supplied ROM ZIP stays unmodified, and the
   program's additive checksum remains unchanged through a tail-word correction.
-- Kept completed video scanlines across the DX-101 sprite-list copy while
-  aborting only an in-progress scanline, targeting transient HUD loss in busy
-  scenes. Added focused renderer and cold/warm RAM-scrub tests.
+- Moved the DX-101 list-copy reads onto the CPU-side sprite-RAM port while the
+  68000 is held, leaving the renderer's read port available continuously.
+  Removed the renderer's per-copy scanline abort and added a port-isolation
+  regression for uninterrupted scanout during list transfers.
+- Constrained frozen rowscroll replay to descriptors whose tilemap page and
+  tile size still match, so a reused packed slot cannot inherit the prior
+  scene's page. Added renderer and cold/warm RAM-scrub tests.
 - Buffered eight complete eight-byte graphics blocks between the MiSTer ROM
   stream and SDRAM writes. Host back-pressure now occurs only when that queue
   fills, instead of after every block. The existing board-tested SDRAM write

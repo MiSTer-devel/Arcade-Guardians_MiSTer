@@ -14,6 +14,12 @@ module gd_ddr_memory
 	output logic        load_wait,
 	output logic        load_idle,
 
+	// Read the MRA's direct-to-DDR staging image back into the normal loader.
+	input  logic [25:0] preload_addr,
+	input  logic        preload_req,
+	output logic [63:0] preload_data,
+	output logic        preload_ack,
+
 	input  logic [20:0] cpu_addr,
 	input  logic        cpu_req,
 	output logic [15:0] cpu_dout,
@@ -53,7 +59,8 @@ module gd_ddr_memory
 localparam logic [28:0] DDR_WORD_BASE = 29'h06000000;
 
 typedef enum logic [2:0] {
-	IDLE, WAIT_CPU, WAIT_SOUND, WAIT_RAM_READ, WAIT_RAM_WRITE, WAIT_GFX
+	IDLE, WAIT_CPU, WAIT_SOUND, WAIT_RAM_READ, WAIT_RAM_WRITE, WAIT_GFX,
+	WAIT_PRELOAD
 } state_t;
 state_t state;
 
@@ -186,6 +193,8 @@ always_ff @(posedge clk) begin
 		gfx_burst_word <= 3'd0;
 		gfx_dout <= 256'd0;
 		gfx_ack <= 1'b0;
+		preload_data <= 64'd0;
+		preload_ack <= 1'b0;
 		ddr_addr <= 29'd0;
 		ddr_rd <= 1'b0;
 		ddr_din <= 64'd0;
@@ -218,7 +227,12 @@ always_ff @(posedge clk) begin
 		case (state)
 			IDLE: begin
 				if (!load_wr && !load_pack_pending && !ddr_we && !ddr_rd) begin
-					if (ram_pending && !ram_write && ram_cache_hit) begin
+					if (!ddr_busy && (preload_req != preload_ack)) begin
+						ddr_addr <= DDR_WORD_BASE + {6'd0, preload_addr[25:3]};
+						ddr_rd <= 1'b1;
+						state <= WAIT_PRELOAD;
+					end
+					else if (ram_pending && !ram_write && ram_cache_hit) begin
 						ram_dout <= cpu_word_from_line(ram_cache_data,
 							ram_addr[2:1]);
 						ram_ack <= ram_req;
@@ -293,7 +307,7 @@ always_ff @(posedge clk) begin
 					end
 					else if (!ddr_busy && gfx_pending) begin
 						gfx_addr_latched <= gfx_addr;
-					gfx_req_latched <= gfx_req;
+						gfx_req_latched <= gfx_req;
 						ddr_addr <= DDR_WORD_BASE + 29'h00080000
 							+ {7'd0, gfx_addr[24:5], 2'b00};
 						gfx_burst_word <= 3'd0;
@@ -351,6 +365,12 @@ always_ff @(posedge clk) begin
 					state <= IDLE;
 				end
 				else gfx_burst_word <= gfx_burst_word + 3'd1;
+			end
+
+			WAIT_PRELOAD: if (ddr_dout_ready) begin
+				preload_data <= ddr_dout;
+				preload_ack <= preload_req;
+				state <= IDLE;
 			end
 
 			default: state <= IDLE;

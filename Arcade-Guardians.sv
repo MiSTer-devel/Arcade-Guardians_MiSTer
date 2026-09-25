@@ -54,7 +54,7 @@ localparam CONF_STR = {
 	"R[0],Reset and close OSD;",
 	"J1,Attack,Jump,Special,Pause,Start,Coin,Service;",
 	"jn,A,B,X,Y,Start,Select,R;",
-	"v,1.2.1 queue-test;",
+	"v,1.2.1 ddr-test;",
 	"V,v",`BUILD_DATE
 };
 
@@ -65,7 +65,7 @@ wire [127:0] status;
 wire ioctl_download;
 wire ioctl_wr;
 wire [26:0] ioctl_addr;
-wire [7:0] ioctl_dout;
+wire [15:0] ioctl_dout;
 wire [15:0] ioctl_index;
 wire ioctl_wait;
 wire [31:0] joystick_0;
@@ -73,7 +73,7 @@ wire [31:0] joystick_1;
 wire [15:0] joystick_l_analog_0;
 wire [15:0] joystick_l_analog_1;
 
-hps_io #(.CONF_STR(CONF_STR)) hps_io
+hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
 (
 	.clk_sys(clk_sys), .HPS_BUS(HPS_BUS), .EXT_BUS(), .gamma_bus,
 	.forced_scandoubler, .buttons, .status, .ioctl_download,
@@ -118,8 +118,9 @@ wire cheat_reset = cold_reset
 always_ff @(posedge clk_sys) begin
 	cheat_code[128] <= 1'b0;
 	if (cheat_download && ioctl_wr) begin
-		cheat_code[127:0] <= {cheat_code[119:0], ioctl_dout};
-		cheat_code[128] <= &ioctl_addr[3:0];
+		cheat_code[127:0] <= {cheat_code[111:0],
+		                         ioctl_dout[7:0], ioctl_dout[15:8]};
+		cheat_code[128] <= &ioctl_addr[3:1];
 	end
 end
 
@@ -133,10 +134,29 @@ gd_pause_toggle pause_control
 logic [15:0] dip_switches = 16'hffff;
 always_ff @(posedge clk_sys) begin
 	if (ioctl_wr && (ioctl_index == 16'd254)) begin
-		if (ioctl_addr == 27'd0) dip_switches[7:0] <= ioctl_dout;
-		if (ioctl_addr == 27'd1) dip_switches[15:8] <= ioctl_dout;
+		if (ioctl_addr == 27'd0) dip_switches <= ioctl_dout;
 	end
 end
+
+wire rom_wide_downloading = ioctl_download && (ioctl_index == 16'd0);
+wire rom_wide_wr = ioctl_wr && (ioctl_index == 16'd0);
+wire rom_wide_wait;
+wire rom_byte_downloading;
+wire rom_byte_wr;
+wire [26:0] rom_byte_addr;
+wire [7:0] rom_byte_data;
+wire rom_byte_wait;
+assign ioctl_wait = (ioctl_index == 16'd0) ? rom_wide_wait : 1'b0;
+
+gd_wide_rom_adapter wide_rom_adapter
+(
+	.clk(clk_sys), .reset(cold_reset),
+	.wide_downloading(rom_wide_downloading), .wide_wr(rom_wide_wr),
+	.wide_addr(ioctl_addr), .wide_data(ioctl_dout),
+	.wide_wait(rom_wide_wait), .byte_downloading(rom_byte_downloading),
+	.byte_wr(rom_byte_wr), .byte_addr(rom_byte_addr),
+	.byte_data(rom_byte_data), .byte_wait(rom_byte_wait)
+);
 
 // The immutable 32 MiB graphics region lives in the low-latency SDRAM. This
 // keeps live tile/sprite traffic off the DDR3 interface used by MiSTer's HDMI
@@ -195,9 +215,9 @@ gd_core core
 	.rotate_180(status[25]),
 	.cheat_reset, .cheat_code,
 	.dip_switches, .joystick_p1, .joystick_p2,
-	.rom_downloading(ioctl_download && (ioctl_index == 16'd0)),
-	.rom_wr(ioctl_wr && (ioctl_index == 16'd0)),
-	.rom_addr(ioctl_addr), .rom_data(ioctl_dout), .rom_wait(ioctl_wait),
+	.rom_downloading(rom_byte_downloading), .rom_wr(rom_byte_wr),
+	.rom_addr(rom_byte_addr), .rom_data(rom_byte_data),
+	.rom_wait(rom_byte_wait),
 	.ddr_clk(DDRAM_CLK), .ddr_busy(DDRAM_BUSY),
 	.ddr_burstcount(DDRAM_BURSTCNT), .ddr_addr(DDRAM_ADDR),
 	.ddr_dout(DDRAM_DOUT), .ddr_dout_ready(DDRAM_DOUT_READY),
