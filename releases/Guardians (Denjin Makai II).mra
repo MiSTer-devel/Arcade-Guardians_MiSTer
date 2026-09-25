@@ -4,7 +4,7 @@
   <mameversion>0287</mameversion>
   <setname>grdians</setname>
   <rotation>horizontal</rotation>
-  <rbf>Arcade-Guardians</rbf>
+  <rbf>Guardians</rbf>
   <about author="kandowontu and OpenAI Codex" webpage="https://github.com/kandowontu/Arcade-Guardians_MiSTer" />
   <buttons names="Attack,Jump,Shot,Pause,Start,Coin,Service" default="A,B,X,Y,Start,Select,R" />
   <switches default="ff,ff" base="8">

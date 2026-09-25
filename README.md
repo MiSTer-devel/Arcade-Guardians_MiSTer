@@ -190,7 +190,7 @@ their original notices and terms. See [`CREDITS.md`](CREDITS.md) and
 The repository follows the MiSTer arcade-core layout: the repository and
 Quartus project use the `Arcade-Guardians` name, while `releases/` contains the
 dated `Arcade-Guardians_20260925.rbf` and its matching
-`Guardians (Denjin Makai II).mra`. The MRA uses the stable `Arcade-Guardians`
-identifier; MiSTer resolves it to the dated core file.
+`Guardians (Denjin Makai II).mra`. Distribution removes the `Arcade-` filename
+prefix, so the MRA uses the stable `Guardians` identifier to find the core.
 Build databases, game ROMs, local packages, and diagnostic artifacts are
 deliberately excluded from version control.
