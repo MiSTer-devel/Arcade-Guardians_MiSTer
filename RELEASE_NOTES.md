@@ -1,9 +1,43 @@
-# Arcade-Guardians MiSTer 1.2.1
+# Arcade-Guardians MiSTer 1.3.0
 
 Native MiSTer FPGA core for Winkysoft's 1995 arcade game
 *Guardians / Denjin Makai II*, licensed to Banpresto.
 
-Highlights:
+Released September 25, 2026. The official repository is
+[MiSTer-devel/Arcade-Guardians_MiSTer](https://github.com/MiSTer-devel/Arcade-Guardians_MiSTer).
+
+## Changes in 1.3.0
+
+- Shortened startup with direct DDR ROM staging, 16-bit transfers, and FPGA RAM
+  clearing. The game's displayed success messages no longer mean that the
+  original full CPU self-test loops were executed; see `README.md` for details.
+- Preserved completed video lines during display-list transfers and restricted
+  scroll-history replay to the relevant packed display-list data.
+- Expanded the private display-list capacity and guarded against sprite-list
+  overflow. Exact original-board overload behavior remains unverified.
+- Replaced the loading gradient with a black screen until the game starts.
+
+See `CHANGELOG.md` for the complete version history and `README.md` for the
+existing validation results and limitations.
+
+## Current staged files
+
+- `releases/Arcade-Guardians_20260925.rbf`
+- `releases/Guardians (Denjin Makai II).mra`
+
+The repository's pending metadata and packaging corrections retain the original
+1.3.0 binary contents. Both MRAs now identify the game as horizontal, label the
+third gameplay action Shot, and link to the official repository. These changes
+do not constitute a new core build or hardware test.
+
+Follow the file-copy instructions in `README.md`. `SHA256SUMS.txt` contains
+current hashes with paths relative to the repository root. Game ROMs are not
+included.
+
+## Historical notes: 1.2.1 — September 6, 2026
+
+The following highlights and exact timing/test results describe the earlier
+1.2.1 release; they are not newly measured 1.3.0 results.
 
 - Added a mappable controller Pause button, assigned to Y by default. Pause
   freezes the CPU, TMP68301 timers, and X1-010 playback state while retaining
@@ -44,8 +78,9 @@ Highlights:
   game reported ROM checksum and RAM access OK before displaying correctly
   decoded intro, loading-screen, and live-gameplay graphics. The replacement
   MRA cheat loader and matching engine add focused simulation coverage.
-- Normalized the repository, Quartus project, and fixed-name release artifacts
-  to the `Arcade-Guardians` MiSTer-devel folder layout.
+- Normalized the repository and Quartus project to the `Arcade-Guardians`
+  layout. That release used fixed-name artifacts, superseded by the dated
+  filename listed above.
 
 ## Credits
 
@@ -66,6 +101,5 @@ Highlights:
 The modeled devices are the Toshiba TMP68301, NEC DX-101 / Allumer X1-020,
 and Seta X1-010. Intel/Altera-generated PLL IP retains its generated notices.
 
-Extract the archive directly to the root of a MiSTer SD card. ROM files are not
-included. See `CREDITS.md` for project, framework, processor-core, MAME
+See `CREDITS.md` for project, framework, processor-core, MAME
 hardware-reference, original-game, cheat-reference, and FPGA-IP attribution.

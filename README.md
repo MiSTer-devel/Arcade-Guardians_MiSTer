@@ -28,7 +28,7 @@ The default mappings are:
 |---|---|
 | Attack | A |
 | Jump | B |
-| Special | X |
+| Shot | X |
 | Pause | Y |
 | Start | Start |
 | Coin | Select |
@@ -185,11 +185,12 @@ Core RTL is distributed under GPL-3.0-or-later. Bundled upstream components keep
 their original notices and terms. See [`CREDITS.md`](CREDITS.md) and
 [`UPSTREAM.md`](UPSTREAM.md) for exact source provenance, and [`LICENSE`](LICENSE).
 
-## MiSTer-devel handoff
+## Repository and releases
 
 The repository follows the MiSTer arcade-core layout: the repository and
 Quartus project use the `Arcade-Guardians` name, while `releases/` contains the
-fixed-name `Arcade-Guardians.rbf` and its matching
-`Guardians (Denjin Makai II).mra`. The MRA names the RBF without an extension.
+dated `Arcade-Guardians_20260925.rbf` and its matching
+`Guardians (Denjin Makai II).mra`. The MRA uses the stable `Arcade-Guardians`
+identifier; MiSTer resolves it to the dated core file.
 Build databases, game ROMs, local packages, and diagnostic artifacts are
 deliberately excluded from version control.

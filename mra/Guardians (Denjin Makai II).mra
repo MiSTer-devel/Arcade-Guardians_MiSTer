@@ -3,9 +3,10 @@
   <mratimestamp>202609060236</mratimestamp>
   <mameversion>0287</mameversion>
   <setname>grdians</setname>
+  <rotation>horizontal</rotation>
   <rbf>Arcade-Guardians</rbf>
   <about author="kandowontu and OpenAI Codex" webpage="https://github.com/kandowontu/Arcade-Guardians_MiSTer" />
-  <buttons names="Attack,Jump,Special,Pause,Start,Coin,Service" default="A,B,X,Y,Start,Select,R" />
+  <buttons names="Attack,Jump,Shot,Pause,Start,Coin,Service" default="A,B,X,Y,Start,Select,R" />
   <switches default="ff,ff" base="8">
     <dip bits="0,1" name="Difficulty" ids="Hardest,Hard,Easy,Normal" />
     <dip bits="2" name="Bonus Life" ids="500000,300000" />
