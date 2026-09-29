@@ -364,6 +364,13 @@ logic signed [11:0] float_last_column;
 logic signed [11:0] float_dest_x;
 logic [15:0] tilemap_attr;
 logic [15:0] tilemap_code;
+logic [10:0] zoomed_target_line;
+logic [16:0] map_x_step;
+logic signed [30:0] map_tile_base;
+logic signed [11:0] prepared_map_x [0:7];
+integer map_prepare_column;
+wire fractional_map_x = (video_x_zoom > 27'h0010000)
+	&& (video_x_zoom < 27'h0020000);
 
 integer calc_sy;
 integer calc_sx;
@@ -441,26 +448,66 @@ function automatic [10:0] global_source_line;
 	input [26:0] y_offset;
 	input [26:0] y_zoom;
 	reg [26:0] offset_phase;
-	reg [11:0] source_sum;
+	reg [26:0] source_step;
+	reg [26:0] source_phase;
 	begin
 		if (!y_zoom[26]) begin
 			global_source_line = {2'b00, physical_line};
 		end
 		else begin
 			offset_phase = 27'h7ffffff - y_offset;
-			// Guardians uses only the DX-101's exact -1.0 gameplay step and
-			// exact -2.0 stage-map step. Implement those shifts directly so
-			// this visibility test does not put a multiplier on the sprite-
-			// list RAM write-enable path.
-			if (y_zoom == 27'h7fe0000)
-				source_sum = {2'b00, physical_line, 1'b0}
-					+ {1'b0, offset_phase[26:16]};
-			else
-				source_sum = {3'b000, physical_line}
-					+ {1'b0, offset_phase[26:16]};
-			// Match the controller's wrapped 11-bit integer source line.
-			global_source_line = source_sum[10:0];
+			// The loading map animates through all 1/32 steps between -2.0
+			// and -1.0. Keep fractional offset carry before wrapping the
+			// controller's 27-bit phase. This is evaluated once during clear,
+			// not on the active-list RAM write-enable path.
+			source_step = 27'd0 - y_zoom;
+			source_phase = physical_line * source_step + offset_phase;
+			global_source_line = source_phase[26:16];
 		end
+	end
+endfunction
+
+// Reciprocal 16.16 output steps for the game's 33 programmed map scales.
+// An explicit table avoids a variable divider in the pixel write path.
+function automatic [16:0] map_x_reciprocal;
+	input [26:0] x_zoom;
+	begin
+		case (x_zoom[17:11])
+			7'd32: map_x_reciprocal = 17'd65536;
+			7'd33: map_x_reciprocal = 17'd63550;
+			7'd34: map_x_reciprocal = 17'd61680;
+			7'd35: map_x_reciprocal = 17'd59918;
+			7'd36: map_x_reciprocal = 17'd58254;
+			7'd37: map_x_reciprocal = 17'd56679;
+			7'd38: map_x_reciprocal = 17'd55188;
+			7'd39: map_x_reciprocal = 17'd53773;
+			7'd40: map_x_reciprocal = 17'd52428;
+			7'd41: map_x_reciprocal = 17'd51150;
+			7'd42: map_x_reciprocal = 17'd49932;
+			7'd43: map_x_reciprocal = 17'd48770;
+			7'd44: map_x_reciprocal = 17'd47662;
+			7'd45: map_x_reciprocal = 17'd46603;
+			7'd46: map_x_reciprocal = 17'd45590;
+			7'd47: map_x_reciprocal = 17'd44620;
+			7'd48: map_x_reciprocal = 17'd43690;
+			7'd49: map_x_reciprocal = 17'd42799;
+			7'd50: map_x_reciprocal = 17'd41943;
+			7'd51: map_x_reciprocal = 17'd41120;
+			7'd52: map_x_reciprocal = 17'd40329;
+			7'd53: map_x_reciprocal = 17'd39568;
+			7'd54: map_x_reciprocal = 17'd38836;
+			7'd55: map_x_reciprocal = 17'd38130;
+			7'd56: map_x_reciprocal = 17'd37449;
+			7'd57: map_x_reciprocal = 17'd36792;
+			7'd58: map_x_reciprocal = 17'd36157;
+			7'd59: map_x_reciprocal = 17'd35544;
+			7'd60: map_x_reciprocal = 17'd34952;
+			7'd61: map_x_reciprocal = 17'd34379;
+			7'd62: map_x_reciprocal = 17'd33825;
+			7'd63: map_x_reciprocal = 17'd33288;
+			7'd64: map_x_reciprocal = 17'd32768;
+			default: map_x_reciprocal = 17'd65536;
+		endcase
 	end
 endfunction
 
@@ -475,8 +522,7 @@ function automatic sprite_intersects_line;
 	input [15:0] fs0;
 	input [15:0] fs1;
 	input  [8:0] physical_line;
-	input [26:0] y_offset;
-	input [26:0] y_zoom;
+	input [10:0] transformed_line;
 	integer sy;
 	integer first_line;
 	integer end_line;
@@ -485,10 +531,10 @@ function automatic sprite_intersects_line;
 	integer width;
 	integer used_line;
 	begin
-		if (fh0[14] || !y_zoom[26])
+		if (fh0[14])
 			used_line = physical_line;
 		else
-			used_line = global_source_line(physical_line, y_offset, y_zoom);
+			used_line = transformed_line;
 		if (fh3[15]) begin
 			sy = fs1 & 16'h01ff;
 			if (sy & 9'h100) sy = sy - 512;
@@ -520,7 +566,7 @@ endfunction
 
 wire scan_record_visible = sprite_intersects_line(
 	h0, h1, h2, h3, scan_record_q[15:0], scan_record_q[31:16],
-	logical_target_line, video_y_offset, video_y_zoom);
+	logical_target_line, zoomed_target_line);
 // The intro fire trail raster-scrolls several four-record tilemap groups.
 // The first plane uses packed records 12..23; the later full-screen plane uses
 // 69..79. Its target moves between groups as the animation advances, and the
@@ -670,6 +716,9 @@ always_comb begin
 		if (!h0[14] && (video_x_zoom == 27'h0020000))
 			draw_pixel_x[draw_calc_column] =
 				$signed(draw_pixel_x[draw_calc_column]) >>> 1;
+		else if (!h0[14] && fractional_map_x)
+			draw_pixel_x[draw_calc_column] =
+				$signed(prepared_map_x[draw_calc_column]);
 	end
 end
 
@@ -810,6 +859,12 @@ always_ff @(posedge clk) begin
 		gfx_addr <= 25'd0;
 		gfx_req <= 1'b0;
 		missed_lines <= 16'd0;
+		zoomed_target_line <= 11'd0;
+		map_x_step <= 17'd65536;
+		map_tile_base <= 31'sd0;
+		for (map_prepare_column = 0; map_prepare_column < 8;
+		     map_prepare_column = map_prepare_column + 1)
+			prepared_map_x[map_prepare_column] <= 12'sd0;
 	end
 	else begin
 		line_done <= 1'b0;
@@ -882,6 +937,11 @@ always_ff @(posedge clk) begin
 				end
 			end
 			R_CLEAR: begin
+				if (clear_x == 9'd0) begin
+					zoomed_target_line <= global_source_line(logical_target_line,
+						video_y_offset, video_y_zoom);
+					map_x_step <= map_x_reciprocal(video_x_zoom);
+				end
 				if (clear_x == 9'd296) begin
 					// The native controller is blank below line 231. Do not rescan and
 					// draw the full sprite list for invisible rows; completing them after
@@ -1014,8 +1074,7 @@ always_ff @(posedge clk) begin
 				if (h0[14] || !video_y_zoom[26])
 					calc_used_line = logical_target_line;
 				else
-					calc_used_line = global_source_line(logical_target_line,
-						video_y_offset, video_y_zoom);
+					calc_used_line = zoomed_target_line;
 				if (h3[15]) begin
 					calc_sy = s1 & 16'h01ff;
 					if (calc_sy & 9'h100) calc_sy = calc_sy - 512;
@@ -1054,13 +1113,13 @@ always_ff @(posedge clk) begin
 						calc_screen_x = h0[14] ? -7
 							: $signed({video_x_offset[26],
 							           video_x_offset[26:16]})
-							  - ((video_x_zoom == 27'h0020000) ? 14 : 7);
+							  - ((video_x_zoom > 27'h0010000) ? 14 : 7);
 						calc_dest_x = calc_sx + s2[9:0]
 							+ (h1 & 16'h03ff) + 16'h10;
 						calc_tile_x = (calc_screen_x - calc_dest_x) & 10'h3ff;
 						float_x <= ((calc_tile_x + 7) >> 3) & 7'h7f;
 						float_columns_remaining <= (!h0[14]
-							&& (video_x_zoom == 27'h0020000)) ? 7'd80 : 7'd40;
+							&& (video_x_zoom > 27'h0010000)) ? 7'd80 : 7'd40;
 						state <= R_FLOAT_SELECT;
 					end
 				end
@@ -1110,6 +1169,7 @@ always_ff @(posedge clk) begin
 			end
 
 			R_NORMAL_PREP: begin
+				map_tile_base <= $signed(tile_screen_x) * $signed({1'b0, map_x_step});
 				// Pipeline the normal-sprite tile-number calculation. Express
 				// its power-of-two products as shifts so this address path does
 				// not infer a DSP multiplier between sprite RAM and the cache.
@@ -1144,6 +1204,10 @@ always_ff @(posedge clk) begin
 						           video_x_offset[26:16]});
 				calc_zoomed_x = calc_screen_x;
 				if (!h0[14] && (video_x_zoom == 27'h0020000))
+					calc_zoomed_x = $signed(calc_screen_x) >>> 1;
+				// Conservative half-scale bounds cover every intermediate map
+				// step without another multiplier on the tilemap issue path.
+				else if (!h0[14] && fractional_map_x)
 					calc_zoomed_x = $signed(calc_screen_x) >>> 1;
 				if (!wrapped_span_contains(float_first_column - 8,
 				        (float_last_column - float_first_column + 1) + 8,
@@ -1183,6 +1247,7 @@ always_ff @(posedge clk) begin
 				state <= R_TILEMAP_PROCESS;
 			end
 			R_TILEMAP_PROCESS: begin
+				map_tile_base <= $signed(float_dest_x) * $signed({1'b0, map_x_step});
 				begin
 					calc_base_code = {tilemap_attr[2:0], tilemap_code};
 					if (float_is_16) begin
@@ -1210,9 +1275,20 @@ always_ff @(posedge clk) begin
 				end
 			end
 
-			R_GFX_WAIT: if (gfx_ack == gfx_req) begin
-				gfx_line <= gfx_dout;
-				state <= R_GFX_DRAW;
+			R_GFX_WAIT: begin
+				// Prepare fractional X during the existing cache wait. Do not add
+				// a tile state: even one extra clock can exhaust the line reservoir
+				// during the intro. Unit and exact half-scale writes retain their
+				// original direct coordinates and transparent-pixel priority.
+				for (map_prepare_column = 0; map_prepare_column < 8;
+				     map_prepare_column = map_prepare_column + 1)
+					prepared_map_x[map_prepare_column] <= ($signed(map_tile_base)
+						+ $signed({1'b0, map_x_step})
+						* (flip_x ? (7 - map_prepare_column) : map_prepare_column)) >>> 16;
+				if (gfx_ack == gfx_req) begin
+					gfx_line <= gfx_dout;
+					state <= R_GFX_DRAW;
+				end
 			end
 			R_GFX_DRAW: begin
 				if (float_mode) begin
@@ -1227,6 +1303,7 @@ always_ff @(posedge clk) begin
 				else if (tile_x + 4'd1 < tiles_x) begin
 					tile_x <= tile_x + 4'd1;
 					tile_screen_x <= tile_screen_x + 12'sd8;
+					map_tile_base <= map_tile_base + $signed({1'b0, map_x_step, 3'b000});
 					tile_code <= flip_x ? tile_code - 19'd1 : tile_code + 19'd1;
 					gfx_addr <= {(flip_x ? tile_code - 19'd1
 						: tile_code + 19'd1), 6'd0} + {19'd0, tile_line, 3'd0};

@@ -101,10 +101,10 @@ initial begin
 		$fatal(1, "non-inverted Y mode did not bypass global transform");
 	if (!dut.sprite_intersects_line(16'h8000, 16'h0000, 16'h0000,
 	        16'h0100, 16'h0000, 16'h0014, 9'd9,
-	        27'h7fc0000, 27'h7fe0000)
+	        dut.global_source_line(9'd9, 27'h7fc0000, 27'h7fe0000))
 	    || dut.sprite_intersects_line(16'h8000, 16'h0000, 16'h0000,
 	        16'h0100, 16'h0000, 16'h0014, 9'd4,
-	        27'h7fc0000, 27'h7fe0000))
+	        dut.global_source_line(9'd4, 27'h7fc0000, 27'h7fe0000)))
 		$fatal(1, "active-list filter ignored loading-screen Y zoom");
 
 	// +2.0 X zoom produces a reciprocal half-pixel output step. Adjacent
@@ -341,18 +341,18 @@ initial begin
 	// Header Y=0x1fa (-6 on the normal-sprite ring) plus local Y=8
 	// starts at line 2. A 10-bit interpretation instead places it at -510.
 	if (!dut.sprite_intersects_line(16'h8000,16'h0000,16'h01fa,
-	        16'h0100,16'h0000,16'h0008,9'd2,27'd0,27'd0)
+	        16'h0100,16'h0000,16'h0008,9'd2,11'd2)
 	    || dut.sprite_intersects_line(16'h8000,16'h0000,16'h01fa,
-	        16'h0100,16'h0000,16'h0008,9'd10,27'd0,27'd0))
+	        16'h0100,16'h0000,16'h0008,9'd10,11'd10))
 		$fatal(1,"normal-sprite header Y did not wrap at 0x200");
 	// The gameplay background uses 0x1f9 -> 0x039 for consecutive
 	// floating-tilemap chunks across the same vertical boundary.
 	if (!dut.sprite_intersects_line(16'h0400,16'h0000,16'h0080,
 	        16'h8100,16'h5000,16'h0df9,9'd0,
-	        27'h77f0000,27'h7ff0000)
+	        dut.global_source_line(9'd0,27'h77f0000,27'h7ff0000))
 	    || dut.sprite_intersects_line(16'h0400,16'h0000,16'h0080,
 	        16'h8100,16'h5000,16'h0df9,9'd57,
-	        27'h77f0000,27'h7ff0000))
+	        dut.global_source_line(9'd57,27'h77f0000,27'h7ff0000)))
 		$fatal(1,"floating background Y did not wrap at 0x200");
 	h_count=0; v_count=0;
 	// One final list header pointing to one 8x8 normal sprite.

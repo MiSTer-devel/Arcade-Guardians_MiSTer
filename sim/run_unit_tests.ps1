@@ -101,6 +101,18 @@ if ($LASTEXITCODE -ne 0) { throw 'DX-101 video unit-test compilation failed' }
 & $vvp $output
 if ($LASTEXITCODE -ne 0) { throw 'DX-101 video unit test failed' }
 
+$output = Join-Path $PSScriptRoot 'dx101_zoom.out'
+& $iverilog -g2012 -s tb_gd_dx101_zoom -o $output rtl/gd_dx101_video.sv sim/tb_gd_dx101_zoom.sv
+if ($LASTEXITCODE -ne 0) { throw 'DX-101 zoom unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'DX-101 zoom unit test failed' }
+
+$output = Join-Path $PSScriptRoot 'dx101_map_draw.out'
+& $iverilog -g2012 -s tb_gd_dx101_map_draw -o $output rtl/gd_dx101_video.sv sim/tb_gd_dx101_map_draw.sv
+if ($LASTEXITCODE -ne 0) { throw 'DX-101 map draw unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'DX-101 map draw unit test failed' }
+
 $output = Join-Path $PSScriptRoot 'sprite_ram.out'
 & $iverilog -g2012 -s tb_gd_sprite_ram -o $output rtl/gd_sprite_ram.sv sim/tb_gd_sprite_ram.sv
 if ($LASTEXITCODE -ne 0) { throw 'Sprite RAM unit-test compilation failed' }
