@@ -12,10 +12,11 @@ copyrighted game ROMs are included in this repository or its releases.
 
 ## Install
 
-1. Copy the latest `releases/Arcade-Guardians_20260929.rbf` to
-   `/media/fat/_Arcade/cores/Guardians_20260929.rbf`, removing the `Arcade-`
-   prefix as in MiSTer-devel distribution. The MRA uses the stable `Guardians`
-   identifier to resolve the dated core.
+1. Extract the release ZIP to the root of the MiSTer SD card. It installs
+   `_Arcade/cores/Guardians.rbf` and `_Arcade/Guardians (Denjin Makai II).mra`.
+   For a manual installation, copy `releases/Arcade-Guardians.rbf` as
+   `/media/fat/_Arcade/cores/Guardians.rbf`, removing the `Arcade-` prefix
+   as in MiSTer-devel distribution. The MRA uses the stable `Guardians` identifier.
 2. Copy `Guardians (Denjin Makai II).mra` to `/media/fat/_Arcade/`.
 3. Put a legally obtained, unmodified `grdians.zip` in
    `/media/fat/games/mame/`.
@@ -124,7 +125,16 @@ The v1.4 RBF closes all analyzed setup, hold, recovery, removal, and minimum
 pulse-width timing classes. System-clock setup slack is +0.805 ns, HDMI setup
 slack is +0.277 ns, and minimum hold slack is +0.245 ns; all reported total
 negative slack values are zero. Its contents are the exact user-tested v1.4
-bitstream; only the repository filename follows the upstream dated convention.
+bitstream; release packaging does not rebuild or modify it.
+
+To package the committed undated release artifacts:
+
+```powershell
+./scripts/package_release.ps1 -Version 1.4
+```
+
+The ROM-free ZIP and checksum manifest are written to `dist/v1.4/`. The ZIP
+contains only the matching MRA and `Guardians.rbf` in their MiSTer folders.
 
 ## Tests
 
@@ -221,8 +231,10 @@ their original notices and terms. See [`CREDITS.md`](CREDITS.md) and
 
 The repository follows the MiSTer arcade-core layout: the repository and
 Quartus project use the `Arcade-Guardians` name, while `releases/` contains the
-dated `Arcade-Guardians_20260929.rbf` and its matching
+exactly one undated `Arcade-Guardians.rbf` and its matching
 `Guardians (Denjin Makai II).mra`. Distribution removes the `Arcade-` filename
 prefix, so the MRA uses the stable `Guardians` identifier to find the core.
+The ZIP already uses the correct installed filename, `Guardians.rbf`.
+Older dated builds remain recoverable from Git history, not in `releases/`.
 Build databases, game ROMs, local packages, and diagnostic artifacts are
 deliberately excluded from version control.

@@ -3,10 +3,11 @@
 The MiSTer-devel installation uses:
 
 - `_Arcade/Guardians (Denjin Makai II).mra`
-- `_Arcade/cores/Guardians_20260929.rbf`
+- `_Arcade/cores/Guardians.rbf`
 
-For a manual installation, copy `releases/Arcade-Guardians_20260929.rbf` under
+For a manual installation, copy `releases/Arcade-Guardians.rbf` under
 that distribution filename. Keep `<rbf>Guardians</rbf>` in the upstream MRA.
+The release ZIP already has the correct folder layout and undated filenames.
 
 Place a legally obtained, unmodified `grdians.zip` at
 `games/mame/grdians.zip`. No ROM files are included in this archive.

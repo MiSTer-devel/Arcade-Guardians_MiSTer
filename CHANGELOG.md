@@ -22,8 +22,9 @@
   normal baseline exactly. A 296-frame Stage 1 fire capture kept the HUD visible.
   User confirmation preceded publication.
 - Included the exact tested RBF with zero-error Quartus 17.0 compilation and
-  positive timing margins. Retained MiSTer-devel's dated repository bitstream,
-  stable `Guardians` MRA identifier, horizontal rotation and Shot metadata.
+  positive timing margins. The release folder contains exactly one undated
+  RBF/MRA pair; the ZIP installs `Guardians.rbf` for the stable `Guardians` MRA
+  identifier. Horizontal rotation and Shot metadata are retained.
   Updated the project link without changing ROM assembly. Author credit
   remains kandowontu.
 

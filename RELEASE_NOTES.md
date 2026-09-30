@@ -44,13 +44,15 @@ existing validation results and limitations.
 
 ## Current staged files
 
-- `releases/Arcade-Guardians_20260929.rbf`
+- `releases/Arcade-Guardians.rbf`
 - `releases/Guardians (Denjin Makai II).mra`
 
 The RBF is byte-for-byte identical to the user-tested
 [v1.4 release](https://github.com/kandowontu2/Arcade-Guardians_MiSTer/releases/tag/v1.4),
 SHA-256 `da1e85d386d8df0c822aae81006f39905b66fa7263d3165a64fc021a54b22de4`.
-Only its repository filename follows the upstream date convention. Both MRAs
+The release folder contains only this undated RBF/MRA pair. The ZIP installs
+`_Arcade/cores/Guardians.rbf` and `_Arcade/Guardians (Denjin Makai II).mra`.
+Older dated builds remain available in Git history. Both MRAs
 retain the stable `Guardians` identifier, horizontal rotation and Shot button
 label; project links point to the official repository. ROM assembly is unchanged.
 
@@ -103,8 +105,8 @@ The following highlights and exact timing/test results describe the earlier
   decoded intro, loading-screen, and live-gameplay graphics. The replacement
   MRA cheat loader and matching engine add focused simulation coverage.
 - Normalized the repository and Quartus project to the `Arcade-Guardians`
-  layout. That release used fixed-name artifacts, superseded by the dated
-  filename listed above.
+  layout. Version 1.4 again uses fixed-name release artifacts, with exactly
+  one RBF and one MRA in `releases/`.
 
 ## Credits
 
