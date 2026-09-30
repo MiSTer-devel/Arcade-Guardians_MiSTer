@@ -46,7 +46,16 @@ logic [15:0] seed_data_bank1;
 logic write_bank;
 logic read_bank;
 logic raster_seen_this_frame;
-wire [6:0] write_index = raster_position[7:1];
+// Stage 1's two 16x16 fire-background chunks are packed at records 2/3,
+// logical page 51 (page 19 plus the tile-size bit). Their IRQ scroll write
+// takes effect on the following pair. At IRQ 62 the newly selected record 3
+// must not replace its packed seed on rows 62/63; it starts on rows 64/65.
+// Indexing the capture at its display phase preserves one read port and
+// leaves the intro's page-30 raster replay entirely unchanged.
+wire stage1_pair_delay = (write_data[15:10] == 6'd51)
+	&& ((write_address[16:2] == 15'd2) || (write_address[16:2] == 15'd3));
+wire [6:0] write_index = raster_position[7:1]
+	+ (stage1_pair_delay ? 7'd1 : 7'd0);
 wire [6:0] read_index = lookup_line[7:1];
 
 // Packed descriptors are four 16-bit words.  Only word 2 is the floating
@@ -85,7 +94,7 @@ always_ff @(posedge clk) begin
 			lookup_live_valid <= 1'b1;
 			lookup_live_record <= write_address[16:2];
 			lookup_live_data <= write_data;
-			if (!write_bank) begin
+			if (!write_bank && (write_index < 7'd116)) begin
 				record_bank0[write_index] <= write_address[16:2];
 				data_bank0[write_index] <= write_data;
 				valid_bank0[write_index] <= 1'b1;
@@ -94,7 +103,7 @@ always_ff @(posedge clk) begin
 					seed_data_bank0 <= write_data;
 				end
 			end
-			else begin
+			else if (write_bank && (write_index < 7'd116)) begin
 				record_bank1[write_index] <= write_address[16:2];
 				data_bank1[write_index] <= write_data;
 				valid_bank1[write_index] <= 1'b1;
