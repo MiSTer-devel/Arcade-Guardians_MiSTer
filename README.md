@@ -1,6 +1,7 @@
 # Arcade: Guardians / Denjin Makai II for MiSTer
 
-Version 1.3.0 is a native FPGA implementation of
+Version 1.4 corrects the stage-map zoom, the Stage 1 fire-background boundary,
+and the remaining corrupted flame-kick transition frame. It is a native FPGA implementation of
 Winkysoft's 1995 arcade game,
 licensed to Banpresto,
 *Guardians / Denjin Makai II* for the MiSTer DE10-Nano platform.
@@ -11,7 +12,10 @@ copyrighted game ROMs are included in this repository or its releases.
 
 ## Install
 
-1. Copy `Arcade-Guardians.rbf` to `/media/fat/_Arcade/cores/`.
+1. Copy the latest `releases/Arcade-Guardians_20260929.rbf` to
+   `/media/fat/_Arcade/cores/Guardians_20260929.rbf`, removing the `Arcade-`
+   prefix as in MiSTer-devel distribution. The MRA uses the stable `Guardians`
+   identifier to resolve the dated core.
 2. Copy `Guardians (Denjin Makai II).mra` to `/media/fat/_Arcade/`.
 3. Put a legally obtained, unmodified `grdians.zip` in
    `/media/fat/games/mame/`.
@@ -97,6 +101,10 @@ ROM, downloader, or helper script is required.
   completion reservoir for stable rowscroll-heavy scenes
 - Packed-descriptor raster targeting that confines the Stage 1 heat effect to
   its floating background layer without distorting foreground actors
+- Fractional stage-map scaling with fixed-position border bypass and no added
+  per-tile renderer cycles
+- Buffered companion-layer identity during live packed-list reuse in the
+  flame-kick transition
 
 The memory design places the 32 MiB graphics bus in MiSTer's SDRAM and keeps
 program ROM, samples, and selected writable storage in DDR3. See
@@ -112,8 +120,11 @@ The release was built with Quartus Prime Lite 17.0 for the Cyclone V
 quartus_sh --flow compile Arcade-Guardians
 ```
 
-The v1.3.0 release build closes all analyzed setup, hold, recovery, and
-removal timing classes; exact results are recorded in its GitHub release notes.
+The v1.4 RBF closes all analyzed setup, hold, recovery, removal, and minimum
+pulse-width timing classes. System-clock setup slack is +0.805 ns, HDMI setup
+slack is +0.277 ns, and minimum hold slack is +0.245 ns; all reported total
+negative slack values are zero. Its contents are the exact user-tested v1.4
+bitstream; only the repository filename follows the upstream dated convention.
 
 ## Tests
 
@@ -136,6 +147,18 @@ gating, and TMP68301 behavior.
 The raster tests also cover ordinary line matches, held-line re-entry, and
 rejection of re-arm writes for future lines. Renderer checks also cover the
 normal and 180-degree coordinate origins without altering native sync timing.
+The v1.4 regressions additionally cover all 33 map scale steps, complete
+fractional tile draws, all 1,536 buffered seed addresses, the Stage 1 row-pair
+boundary, and actual DMA/scanout pixels during kick companion reuse.
+
+To compare ordinary rendering cycle-for-cycle against the published v1.3.0
+baseline (a commit present in this repository's history):
+
+```powershell
+./sim/run_unit_cycle_compare.ps1
+```
+
+The comparison passed for 180,400 clocks and 40 completed rows.
 
 The game hardware path was verified on a DE10-Nano with the MRA and an
 unmodified ROM set. Validation included a cold MRA boot, successful ROM
@@ -162,11 +185,20 @@ is a local measurement, not a guaranteed transfer speed on every setup.
 
 The DX-101 list copy now uses the CPU-side sprite-RAM port while the 68000 is
 held. The renderer keeps its own read port and does not discard a scanline at
-each copy. Native-resolution MiSTer captures verified the flame-kick intro
-without the former horizontal bands, including the first striped frame and
-the later full-screen fire. The history collector now excludes tilemap writes
-from packed-list scroll replay. These captures do not establish exact
-original-PCB sprite-overload behavior.
+each copy. The history collector excludes tilemap writes from packed-list
+scroll replay. Version 1.4 fixes the remaining corrupted flame-kick transition
+frame by keeping the old lower-bitplane companion paired with its buffered
+tilemap identity while software starts writing a new fire group into the same
+packed slots. Ordinary same-page live scrolling is unchanged.
+
+The v1.4 hardware check recorded 886 consecutive native intro frames without
+counter gaps. The previously corrupted kick-frame color pattern was absent,
+and all 291 checked green-character frames matched the normal published
+baseline exactly. A further 296-frame Stage 1 post-explosion capture retained
+the HUD with no diagnostic strip. The map, background boundary, and intro
+changes were subsequently confirmed by the user before release. Native FPGA
+captures, not MAME-rendered pictures, were used for the visual regression check.
+These checks do not establish exact original-PCB sprite-overload behavior.
 
 Sprite-list overflow is protected against corruption of the base-list headers.
 Exact original-PCB sprite-overload behavior has not yet been established: the
@@ -189,7 +221,7 @@ their original notices and terms. See [`CREDITS.md`](CREDITS.md) and
 
 The repository follows the MiSTer arcade-core layout: the repository and
 Quartus project use the `Arcade-Guardians` name, while `releases/` contains the
-dated `Arcade-Guardians_20260925.rbf` and its matching
+dated `Arcade-Guardians_20260929.rbf` and its matching
 `Guardians (Denjin Makai II).mra`. Distribution removes the `Arcade-` filename
 prefix, so the MRA uses the stable `Guardians` identifier to find the core.
 Build databases, game ROMs, local packages, and diagnostic artifacts are

@@ -101,6 +101,18 @@ if ($LASTEXITCODE -ne 0) { throw 'DX-101 video unit-test compilation failed' }
 & $vvp $output
 if ($LASTEXITCODE -ne 0) { throw 'DX-101 video unit test failed' }
 
+$output = Join-Path $PSScriptRoot 'dx101_zoom.out'
+& $iverilog -g2012 -s tb_gd_dx101_zoom -o $output rtl/gd_dx101_video.sv sim/tb_gd_dx101_zoom.sv
+if ($LASTEXITCODE -ne 0) { throw 'DX-101 zoom unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'DX-101 zoom unit test failed' }
+
+$output = Join-Path $PSScriptRoot 'dx101_map_draw.out'
+& $iverilog -g2012 -s tb_gd_dx101_map_draw -o $output rtl/gd_dx101_video.sv sim/tb_gd_dx101_map_draw.sv
+if ($LASTEXITCODE -ne 0) { throw 'DX-101 map draw unit-test compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'DX-101 map draw unit test failed' }
+
 $output = Join-Path $PSScriptRoot 'sprite_ram.out'
 & $iverilog -g2012 -s tb_gd_sprite_ram -o $output rtl/gd_sprite_ram.sv sim/tb_gd_sprite_ram.sv
 if ($LASTEXITCODE -ne 0) { throw 'Sprite RAM unit-test compilation failed' }
@@ -108,6 +120,13 @@ if ($LASTEXITCODE -ne 0) { throw 'Sprite RAM unit-test compilation failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Sprite RAM unit test failed' }
 
 $output = Join-Path $PSScriptRoot 'cpu_ram_scrub.out'
+$kickOutput = Join-Path $PSScriptRoot 'kick_companion.out'
+& $iverilog -g2012 -s tb_gd_kick_companion -o $kickOutput `
+    rtl/gd_sprite_ram.sv rtl/gd_dx101_video.sv sim/tb_gd_kick_companion.sv
+if ($LASTEXITCODE -ne 0) { throw 'Kick companion unit-test compilation failed' }
+& $vvp $kickOutput
+if ($LASTEXITCODE -ne 0) { throw 'Kick companion unit test failed' }
+
 & $iverilog -g2012 -s tb_gd_cpu_ram_scrub -o $output `
     rtl/gd_word_ram.sv rtl/gd_mra_cheat_engine.sv `
     rtl/gd_sprite_ram.sv rtl/gd_tmp68301.sv `

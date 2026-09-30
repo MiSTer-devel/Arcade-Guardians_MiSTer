@@ -1,10 +1,32 @@
-# Arcade-Guardians MiSTer 1.3.0
+# Arcade-Guardians MiSTer 1.4
 
 Native MiSTer FPGA core for Winkysoft's 1995 arcade game
 *Guardians / Denjin Makai II*, licensed to Banpresto.
 
-Released September 25, 2026. The official repository is
+User-tested build dated September 29, 2026. The official repository is
 [MiSTer-devel/Arcade-Guardians_MiSTer](https://github.com/MiSTer-devel/Arcade-Guardians_MiSTer).
+
+## Changes in 1.4
+
+- Correct fractional loading-map zoom/phase and fixed-position border bypass
+  without an additional per-tile renderer cycle.
+- Apply the Stage 1 fire-background IRQ-62 change on the following row pair,
+  correcting the visible background chunk boundary.
+- Preserve buffered companion identity when live packed-list records are
+  reused during the flame-kick transition, fixing its corrupt frame.
+- Add complete map-draw, all-1,536-address seed and actual kick DMA/pixel
+  regressions. No temporary diagnostic pixels are included.
+
+The focused RTL suite passed. Normal-mode rendering matched v1.3.0 for
+180,400 clocks and 40 completed rows. Native capture recorded 886 consecutive
+intro frames without gaps; the corrupt kick color was absent and all 291
+checked green-character frames matched the normal baseline exactly. A further
+296-frame Stage 1 capture kept the HUD visible. The user confirmed the build
+before release. Exact PCB sprite-overload behavior remains unverified.
+
+Quartus Prime Lite 17.0 compilation completed with zero errors and positive
+timing margins: +0.805 ns system setup, +0.277 ns HDMI setup, +0.245 ns minimum
+hold, and zero reported total negative slack.
 
 ## Changes in 1.3.0
 
@@ -22,13 +44,15 @@ existing validation results and limitations.
 
 ## Current staged files
 
-- `releases/Arcade-Guardians_20260925.rbf`
+- `releases/Arcade-Guardians_20260929.rbf`
 - `releases/Guardians (Denjin Makai II).mra`
 
-The repository's pending metadata and packaging corrections retain the original
-1.3.0 binary contents. Both MRAs now identify the game as horizontal, label the
-third gameplay action Shot, and link to the official repository. These changes
-do not constitute a new core build or hardware test.
+The RBF is byte-for-byte identical to the user-tested
+[v1.4 release](https://github.com/kandowontu2/Arcade-Guardians_MiSTer/releases/tag/v1.4),
+SHA-256 `da1e85d386d8df0c822aae81006f39905b66fa7263d3165a64fc021a54b22de4`.
+Only its repository filename follows the upstream date convention. Both MRAs
+retain the stable `Guardians` identifier, horizontal rotation and Shot button
+label; project links point to the official repository. ROM assembly is unchanged.
 
 Follow the file-copy instructions in `README.md`. `SHA256SUMS.txt` contains
 current hashes with paths relative to the repository root. Game ROMs are not

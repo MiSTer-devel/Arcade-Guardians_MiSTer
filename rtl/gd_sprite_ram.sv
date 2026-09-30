@@ -17,6 +17,7 @@ module gd_sprite_ram
 	input  logic        video_clk,
 	input  logic [16:0] video_address,
 	output logic [63:0] video_q,
+	output logic [15:0] video_seed_q,
 	output logic        buffer_busy
 );
 
@@ -51,6 +52,24 @@ logic [16:0] copy_read_address;
 logic [14:0] copy_dest_record;
 logic        copy_last_header;
 localparam logic [14:0] PACKED_RECORD_LIMIT = 15'h0600;
+// Keep the packed word-2 seed paired with the private header generation.
+// During the kick transition software starts raster-writing a new fire group
+// before the next buffer trigger retires the old companion-layer header.
+// Live sprite RAM must remain writable; the seed lets the renderer preserve
+// the old companion identity without delaying a row or stealing a RAM port.
+(* ramstyle = "MLAB, no_rw_check" *) logic [15:0] packed_seed [0:1535];
+
+always_ff @(posedge clk) begin
+	if (copy_record_write)
+		packed_seed[copy_dest_record] <= bank_q[2];
+end
+
+always_ff @(posedge video_clk) begin
+	if (reset || (video_address >= 17'h01800))
+		video_seed_q <= 16'd0;
+	else
+		video_seed_q <= packed_seed[video_address[16:2]];
+end
 
 assign buffer_busy = (copy_state != C_IDLE);
 // The packed destination occupies bytes 0x0000-0x2fff. A longer source list

@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.4 - 2026-09-29
+
+- Corrected fractional X/Y scaling and source phase on the stage-map/loading
+  screen while preserving fixed-position border graphics. All 33 map scale
+  steps are covered by regression tests; no extra per-tile renderer cycle
+  was added.
+- Corrected the Stage 1 fire-background chunk boundary: the IRQ-62 scroll
+  change now takes effect on the following row pair instead of cutting the
+  preceding chunk short. The change is limited to the affected background
+  records and leaves intro fire replay unchanged.
+- Fixed the remaining corrupted flame-kick transition frame. Packed word-2
+  seeds retain the old companion-layer tilemap identity until the next display
+  list copy, preventing new upper-bitplane fire words from being drawn through
+  an old lower-bitplane companion header. Same-page live scrolling is retained.
+- Added complete map-draw, kick DMA/scanout, and all-1,536-address seed-buffer
+  regressions. Ordinary rendering matches the published baseline cycle-for-
+  cycle over 180,400 clocks and 40 completed rows.
+- Verified 886 consecutive native intro frames with no gaps: the corrupt kick
+  color pattern is gone and all 291 checked green-character frames match the
+  normal baseline exactly. A 296-frame Stage 1 fire capture kept the HUD visible.
+  User confirmation preceded publication.
+- Included the exact tested RBF with zero-error Quartus 17.0 compilation and
+  positive timing margins. Retained MiSTer-devel's dated repository bitstream,
+  stable `Guardians` MRA identifier, horizontal rotation and Shot metadata.
+  Updated the project link without changing ROM assembly. Author credit
+  remains kandowontu.
+
 ## 1.3.0 - 2026-09-25
 
 - Restricted raster-scroll history to the DX-101 packed display-list range.

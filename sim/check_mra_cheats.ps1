@@ -5,8 +5,22 @@ $mraPath = Join-Path $PSScriptRoot '..\mra\Guardians (Denjin Makai II).mra'
 $cheats = @($mra.misterromdescription.cheats.cheat)
 
 $rbfName = [string]$mra.misterromdescription.rbf
-if ($rbfName -ne 'Arcade-Guardians') {
-    throw "MRA references '$rbfName'; expected fixed core name 'Arcade-Guardians'"
+if ($rbfName -ne 'Guardians') {
+    throw "MRA references '$rbfName'; expected distribution core name 'Guardians'"
+}
+
+$releaseMraPath = Join-Path $PSScriptRoot '..\releases\Guardians (Denjin Makai II).mra'
+[xml]$releaseMra = Get-Content -LiteralPath $releaseMraPath -Raw
+if ([string]$releaseMra.misterromdescription.rbf -ne 'Guardians') {
+    throw "Release MRA must retain the upstream 'Guardians' distribution identifier"
+}
+foreach ($description in @($mra.misterromdescription, $releaseMra.misterromdescription)) {
+    if ([string]$description.rotation -ne 'horizontal') {
+        throw 'Both MRAs must retain the upstream horizontal rotation metadata'
+    }
+    if ([string]$description.buttons.names -ne 'Attack,Jump,Shot,Pause,Start,Coin,Service') {
+        throw 'Both MRAs must retain the upstream Shot button name and control order'
+    }
 }
 
 $expected = [ordered]@{
@@ -45,4 +59,4 @@ foreach ($cheat in $cheats) {
     }
 }
 
-Write-Output "PASS MRA targets Arcade-Guardians and contains $($cheats.Count) named cheats and 16 valid codes"
+Write-Output "PASS both upstream MRAs target Guardians with horizontal rotation/Shot; $($cheats.Count) named cheats and 16 valid codes"

@@ -120,6 +120,34 @@ initial begin
 	lookup_line=6; #1;
 	if (lookup_valid) $fatal(1, "partial scroll word was captured");
 
+	// Stage 1 switches from record 2 to record 3 at IRQ 62. History must
+	// retain the prior chunk on rows 62/63, then use the new word on 64/65.
+	capture(60, 17'h0000a, 16'hcc07);
+	capture(62, 17'h0000e, 16'hcc10);
+	capture(64, 17'h0000e, 16'hcc20);
+	capture(230,17'h0000e, 16'hcc30);
+	swap_frame();
+	lookup_line=62; #1;
+	if (!lookup_valid || lookup_record != 15'd2 || lookup_data != 16'hcc07)
+		$fatal(1,"IRQ-62 boundary replayed new chunk too early");
+	lookup_line=63; #1;
+	if (!lookup_valid || lookup_record != 15'd2 || lookup_data != 16'hcc07)
+		$fatal(1,"second boundary row lost previous chunk");
+	lookup_line=64; #1;
+	if (!lookup_valid || lookup_record != 15'd3 || lookup_data != 16'hcc10)
+		$fatal(1,"new chunk did not start on following pair");
+	lookup_line=65; #1;
+	if (!lookup_valid || lookup_data != 16'hcc10)
+		$fatal(1,"second new-chunk row mismatch");
+	lookup_line=66; #1;
+	if (!lookup_valid || lookup_data != 16'hcc20)
+		$fatal(1,"next pair did not advance scroll history");
+	lookup_line=230; #1;
+	if (lookup_valid)
+		$fatal(1,"invisible last IRQ indexed visible history");
+	if (lookup_seed_valid)
+		$fatal(1,"Stage 1 phase created an intro fire seed");
+
 	capture_enable=0;
 	swap_frame();
 	if (dut.raster_seen_this_frame)

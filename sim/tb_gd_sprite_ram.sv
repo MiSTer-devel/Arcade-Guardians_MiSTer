@@ -13,12 +13,14 @@ logic write = 0;
 logic [15:0] q;
 logic [16:0] video_address = 0;
 logic [63:0] video_q;
+logic [15:0] video_seed_q;
 integer header;
+integer source_record;
 
 gd_sprite_ram dut
 (
 	.clk, .reset, .buffer_trigger, .address, .data, .byte_enable,
-	.write, .q, .video_clk(clk), .video_address, .video_q, .buffer_busy
+	.write, .q, .video_clk(clk), .video_address, .video_q, .video_seed_q, .buffer_busy
 );
 
 task automatic write_word(input [16:0] a, input [15:0] d);
@@ -100,6 +102,17 @@ initial begin
 	expect_record(17'h00000, 64'ha003_a002_a001_a000);
 	write_word(17'h00003, 16'hd00d);
 	expect_record(17'h00000, 64'hd00d_a002_a001_a000);
+	// Raster word-2 edits stay live, but the seed belongs to the buffered
+	// descriptor generation and has identical video-address latency.
+	if (video_seed_q !== 16'ha002)
+		$fatal(1, "packed seed did not follow the video record address");
+	write_word(17'h00002, 16'h79f0);
+	expect_record(17'h00000, 64'hd00d_79f0_a001_a000);
+	if (video_seed_q !== 16'ha002)
+		$fatal(1, "live raster write overwrote the buffered descriptor seed");
+	expect_record(17'h00008, 64'hc003_c002_c001_c000);
+	if (video_seed_q !== 16'hc002)
+		$fatal(1, "packed seeds aliased adjacent descriptor generations");
 
 	// The attract game can issue 40 headers in one buffered list. Header 39
 	// must survive; a 32-entry cap truncates the late foreground/HUD groups.
@@ -146,7 +159,14 @@ initial begin
 			(header == 6) ? 16'h80ff : 16'h00ff);
 		write_word(17'h01800 + header * 4 + 1, 16'h0000);
 		write_word(17'h01800 + header * 4 + 2, 16'h0000);
-		write_word(17'h01800 + header * 4 + 3, 16'h8800);
+		write_word(17'h01800 + header * 4 + 3, 16'h8800 + header * 256);
+		for (source_record = 0; source_record < 256;
+		     source_record = source_record + 1) begin
+			write_word(17'h02000 + header * 1024 + source_record * 4,
+				16'ha000 + source_record);
+			write_word(17'h02002 + header * 1024 + source_record * 4,
+				header * 256 + source_record);
+		end
 	end
 	buffer_trigger <= 1'b1;
 	@(posedge clk);
@@ -158,6 +178,17 @@ initial begin
 	expect_record(17'h01818, 64'h8600_0000_0000_80ff);
 	if (dut.bank_memory[0][15'h0600] !== 16'h00ff)
 		$fatal(1, "packed sprite overflow overwrote the base list");
+	// All 1536 seeds must remain distinct across 512/1024-record boundaries.
+	// A truncated seed address silently corrupts late gameplay display groups.
+	for (source_record = 0; source_record < 1536;
+	     source_record = source_record + 1) begin
+		video_address <= source_record * 4;
+		repeat (2) @(posedge clk);
+		#1;
+		if (video_seed_q !== source_record[15:0])
+			$fatal(1, "packed seed address alias at record %0d: got %h",
+				source_record, video_seed_q);
+	end
 
 	$display("PASS gd_sprite_ram performed DX-101 list buffering");
 	$finish;
