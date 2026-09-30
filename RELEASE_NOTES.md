@@ -109,7 +109,7 @@ The following highlights and exact timing/test results describe the earlier
 ## Credits
 
 - Core RTL, MiSTer integration, tests, and documentation: OpenAI Codex
-- Hardware testing, direction, game validation, and release: kandowontu / kandowontu2
+- Hardware testing, direction, game validation, and release: kandowontu
 - Original game: Winkysoft, under license to Banpresto
 - Original P-FG01-1 board: its original engineers and hardware designers
 - fx68k 68000-compatible core: Jorge Cwik

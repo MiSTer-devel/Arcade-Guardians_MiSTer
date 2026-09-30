@@ -4,7 +4,6 @@
 
 - FPGA core RTL, integration, tests, and documentation: OpenAI Codex
 - Hardware testing, game validation, direction, and release: kandowontu
-  (now `kandowontu2` on GitHub)
 - Original arcade game: Winkysoft, under license to Banpresto
 - Original P-FG01-1 hardware: its original engineers and hardware designers
 

@@ -24,7 +24,8 @@
 - Included the exact tested RBF with zero-error Quartus 17.0 compilation and
   positive timing margins. Retained MiSTer-devel's dated repository bitstream,
   stable `Guardians` MRA identifier, horizontal rotation and Shot metadata.
-  Updated the account credit/project link without changing ROM assembly.
+  Updated the project link without changing ROM assembly. Author credit
+  remains kandowontu.
 
 ## 1.3.0 - 2026-09-25
 

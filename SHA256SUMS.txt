@@ -1,3 +1,3 @@
 8333f6ada56a765ce782762aa4bcf08beb51f7f2d9e0d834c393ebc25c7e1368  releases/Arcade-Guardians_20260925.rbf
 da1e85d386d8df0c822aae81006f39905b66fa7263d3165a64fc021a54b22de4  releases/Arcade-Guardians_20260929.rbf
-22859c8e4b156e3d87a2958a9fe00a35ae2d05ad141352757269c94ae02dfb25  releases/Guardians (Denjin Makai II).mra
+c0a8c4d69ff4f288b0ee2342c7cfa6d5b1618daa24d26a47989626685be5313a  releases/Guardians (Denjin Makai II).mra
