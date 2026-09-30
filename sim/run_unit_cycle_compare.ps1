@@ -1,5 +1,5 @@
 param(
-    [string]$BaselineCommit = 'c4741605a86c72f9d85a35f472cfb7b8c48bd7ed'
+    [string]$BaselineCommit = '742927e918f18fd01efe76fbb1506b81c250c8ef'
 )
 $ErrorActionPreference = 'Stop'
 $iverilog = if ($env:IVERILOG) { $env:IVERILOG } else { (Get-Command iverilog).Source }

@@ -1,11 +1,11 @@
 <misterromdescription>
   <name>Guardians / Denjin Makai II</name>
-  <mratimestamp>202609060236</mratimestamp>
+  <mratimestamp>202609292120</mratimestamp>
   <mameversion>0287</mameversion>
   <setname>grdians</setname>
   <rotation>horizontal</rotation>
   <rbf>Guardians</rbf>
-  <about author="kandowontu and OpenAI Codex" webpage="https://github.com/kandowontu/Arcade-Guardians_MiSTer" />
+  <about author="kandowontu2 and OpenAI Codex" webpage="https://github.com/MiSTer-devel/Arcade-Guardians_MiSTer" />
   <buttons names="Attack,Jump,Shot,Pause,Start,Coin,Service" default="A,B,X,Y,Start,Select,R" />
   <switches default="ff,ff" base="8">
     <dip bits="0,1" name="Difficulty" ids="Hardest,Hard,Easy,Normal" />
