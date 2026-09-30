@@ -24,6 +24,7 @@ logic [26:0] video_y_offset=0;
 logic [26:0] video_y_zoom=0;
 logic [16:0] sprite_address;
 logic [63:0] sprite_q=0;
+logic [15:0] sprite_seed_q=0;
 logic [14:0] palette_address;
 logic [15:0] palette_q=0;
 logic [24:0] gfx_addr;
@@ -274,6 +275,48 @@ initial begin
 	release dut.h0;
 	release dut.h1;
 	release dut.h2;
+	// Reproduce the native bad kick frame: the old last 4-bpp header reads
+	// newly written fire pages in its former companion slots. Its DMA seed
+	// must win without changing the actual 5-bpp fire or same-page scrolls.
+	force dut.h0 = 16'h8403;
+	force dut.h1 = 16'h0070;
+	force dut.h2 = 16'h0080;
+	force dut.h3 = 16'h8049;
+	force dut.sprite_pointer = {15'd73, 2'b00};
+	force dut.scan_record_q = 64'h0080_79f0_0c00_5000;
+	force dut.scan_seed_q = 16'h7c00;
+	rowscroll_override_valid = 1'b1;
+	rowscroll_override_record = 15'd69;
+	rowscroll_override_data = 16'h7987;
+	#1;
+	if (!dut.scan_companion_reused || dut.scan_s2 !== 16'h7c00)
+		$fatal(1, "new fire data leaked into the old lower-bitplane companion");
+	force dut.scan_seed_q = 16'h7d23;
+	#1;
+	if (dut.scan_s2 !== 16'h7d23)
+		$fatal(1, "companion restore guessed a constant instead of the buffered scroll");
+	force dut.scan_record_q = 64'h0080_7cf0_0c00_5000;
+	#1;
+	if (dut.scan_companion_reused || dut.scan_s2 !== 16'h7cf0)
+		$fatal(1, "companion restore changed an ordinary same-page live scroll");
+	force dut.scan_record_q = 64'h0080_79f0_0c00_5000;
+	force dut.scan_seed_q = 16'h7800;
+	#1;
+	if (dut.scan_companion_reused || dut.scan_s2 !== 16'h79f0)
+		$fatal(1, "companion restore changed a layer without a page-31 seed");
+	force dut.scan_seed_q = 16'h7c00;
+	force dut.h0 = 16'h0503;
+	#1;
+	if (dut.scan_companion_reused || dut.scan_s2 !== 16'h7987)
+		$fatal(1, "companion restore changed the upper-bitplane fire replay");
+	rowscroll_override_valid = 1'b0;
+	release dut.scan_seed_q;
+	release dut.scan_record_q;
+	release dut.sprite_pointer;
+	release dut.h0;
+	release dut.h1;
+	release dut.h2;
+	release dut.h3;
 	// The heat descriptor must not overwrite an actor pixel beyond X=63. This
 	// also catches the former six-bit shift truncation in the occupancy lookup.
 	if (dut.physical_draw_address(6'd25, 3'd2) !== 9'd202)

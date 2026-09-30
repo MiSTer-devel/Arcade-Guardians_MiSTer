@@ -19,6 +19,7 @@ gd_dx101_video #(.AHEAD_RENDER(1'b1)) dut(
 	.video_control(16'd0),.rotate_180(1'b0),.video_x_offset(27'd0),
 	.video_x_zoom(x_zoom),.video_y_offset(27'h7fc0000),
 	.video_y_zoom(27'h7fe8000),.sprite_address(sprite_address),.sprite_q(sprite_q),
+	.sprite_seed_q(16'd0),
 	.palette_q(16'd0),.gfx_req(gfx_req),.gfx_ack(gfx_ack),
 	.gfx_dout(64'h0000_0000_1e01_aa66),.busy(busy),.line_done(line_done)
 );

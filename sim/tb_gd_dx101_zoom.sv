@@ -13,7 +13,8 @@ gd_dx101_video dut(
 	.rowscroll_live_data(16'd0), .video_control(16'd0), .rotate_180(1'b0),
 	.video_x_offset(27'd0), .video_x_zoom(x_zoom),
 	.video_y_offset(27'd0), .video_y_zoom(27'd0),
-	.sprite_q(64'd0), .palette_q(16'd0), .gfx_dout(64'd0), .gfx_ack(1'b0)
+	.sprite_q(64'd0), .sprite_seed_q(16'd0),
+	.palette_q(16'd0), .gfx_dout(64'd0), .gfx_ack(1'b0)
 );
 integer step, y, offset_case, source_x, column, flip;
 integer expected, reciprocal;

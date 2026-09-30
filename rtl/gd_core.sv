@@ -180,6 +180,7 @@ gd_raster_irq raster_timer
 
 logic [16:0] sprite_video_address;
 logic [63:0] sprite_video_q;
+logic [15:0] sprite_video_seed_q;
 logic [14:0] palette_video_address;
 logic [15:0] palette_video_q;
 logic [4:0] video_reg_address;
@@ -205,7 +206,7 @@ gd_cpu_subsystem cpu
 	.ram_addr(cpu_ram_addr), .ram_req(cpu_ram_req), .ram_write(cpu_ram_write),
 	.ram_data(cpu_ram_data), .ram_be(cpu_ram_be), .ram_dout(cpu_ram_dout),
 	.ram_ack(cpu_ram_ack),
-	.sprite_video_address, .sprite_video_q,
+	.sprite_video_address, .sprite_video_q, .sprite_video_seed_q,
 	.palette_video_address, .palette_video_q,
 	.video_reg_address, .video_reg_q, .video_control,
 	.video_x_offset, .video_x_zoom, .video_y_offset, .video_y_zoom,
@@ -302,6 +303,7 @@ gd_dx101_video #(.AHEAD_RENDER(1'b1)) video
 	.video_x_offset, .video_x_zoom, .video_y_offset, .video_y_zoom,
 	.sprite_address(sprite_video_address),
 	.sprite_q(sprite_video_q),
+	.sprite_seed_q(sprite_video_seed_q),
 	.palette_address(palette_video_address),
 	.palette_q(palette_video_q), .gfx_addr(renderer_gfx_addr),
 	.gfx_req(renderer_gfx_req), .gfx_dout(renderer_gfx_dout),

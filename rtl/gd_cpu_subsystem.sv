@@ -31,6 +31,7 @@ module gd_cpu_subsystem
 
 	input  logic [16:0] sprite_video_address,
 	output logic [63:0] sprite_video_q,
+	output logic [15:0] sprite_video_seed_q,
 	input  logic [14:0] palette_video_address,
 	output logic [15:0] palette_video_q,
 	input  logic  [4:0] video_reg_address,
@@ -272,6 +273,7 @@ gd_sprite_ram sprite_ram
 	.address(cpu_even_address[17:1]), .data(cpu_data_out),
 	.byte_enable(cpu_byte_enable), .write(local_write && cs_sprite), .q(sprite_q),
 	.video_clk(clk), .video_address(sprite_video_address), .video_q(sprite_video_q),
+	.video_seed_q(sprite_video_seed_q),
 	.buffer_busy(sprite_buffer_busy)
 );
 

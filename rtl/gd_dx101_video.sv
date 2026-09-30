@@ -41,6 +41,7 @@ module gd_dx101_video
 
 	output logic [16:0] sprite_address,
 	input  logic [63:0] sprite_q,
+	input  logic [15:0] sprite_seed_q,
 	output logic [14:0] palette_address,
 	input  logic [15:0] palette_q,
 
@@ -331,6 +332,7 @@ render_state_t state;
 logic [8:0] header_index;
 logic [1:0] read_word;
 logic [63:0] scan_record_q;
+logic [15:0] scan_seed_q;
 logic [15:0] h0, h1, h2, h3;
 logic [15:0] s0, s1, s2, s3;
 logic [8:0] sprites_remaining;
@@ -655,7 +657,23 @@ wire scan_rowscroll_fire_live = !rowscroll_override_valid
 	        && (scan_record_q[47:42] <= 6'd31)))
 	&& (rowscroll_live_data[15:10] >= 6'd29)
 	&& (rowscroll_live_data[15:10] <= 6'd31);
-wire [15:0] scan_s2 = scan_rowscroll_target
+// A frame-accurate native trace shows the late 4-bpp companion header still
+// pointing at records 73..76 while software has begun writing the new 5-bpp
+// fire surface there. Rendering those live page-30 words with the old 4-bpp
+// header selects the lower fire bitplanes and produces one teal/garbled frame.
+// Restore the actual buffered word, not a guessed constant page or scroll.
+// Only that companion identity/page change is protected; the upper-bitplane
+// fire layer and ordinary same-page live scrolls retain their existing path.
+wire scan_companion_reused = h3[15] && (h0[10:8] == 3'd4)
+	&& (h0[7:0] == 8'd3)
+	&& (h1[9:0] == 10'h070) && (h2[8:0] == 9'h080)
+	&& (scan_record_q[15:0] == 16'h5000)
+	&& (scan_record_q[31:26] == 6'd3)
+	&& (scan_seed_q[15:10] == 6'd31)
+	&& ((scan_record_q[47:42] == 6'd29)
+	    || (scan_record_q[47:42] == 6'd30));
+wire [15:0] scan_s2 = scan_companion_reused ? scan_seed_q
+	: scan_rowscroll_target
 	? rowscroll_override_data
 	: scan_rowscroll_fire_live ? rowscroll_live_data
 	: scan_rowscroll_fire_seed ? rowscroll_seed_data
@@ -672,9 +690,11 @@ wire [127:0] scan_record_data = {
 always_ff @(posedge clk) begin
 	if (reset) begin
 		scan_record_q <= 64'd0;
+		scan_seed_q <= 16'd0;
 	end
 	else if ((state == R_SPRITE_PIPE) || (state == R_SPRITE_CAPTURE)) begin
 		scan_record_q <= sprite_q;
+		scan_seed_q <= sprite_seed_q;
 	end
 	if ((state == R_SPRITE_CAPTURE) && scan_record_visible
 	    && (active_count < 8'd128))

@@ -26,6 +26,7 @@ gd_dx101_video #(.AHEAD_RENDER(1'b1)) candidate(
 	.video_control(16'd0),.rotate_180(1'b0),.video_x_offset(27'h0080000),
 	.video_x_zoom(27'h0010000),.video_y_offset(27'h77f0000),
 	.video_y_zoom(27'h7ff0000),.sprite_address(address_a),.sprite_q(sprite_q),
+	.sprite_seed_q(16'd0),
 	.palette_address(palette_a),.palette_q(palette_q),.gfx_addr(gfx_a),
 	.gfx_req(req_a),.gfx_dout(64'h0000_0000_1e01_aa66),.gfx_ack(ack),
 	.red(red_a),.green(green_a),.blue(blue_a),.busy(busy_a),.line_done(done_a),

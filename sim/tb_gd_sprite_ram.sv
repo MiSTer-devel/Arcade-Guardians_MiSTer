@@ -13,12 +13,13 @@ logic write = 0;
 logic [15:0] q;
 logic [16:0] video_address = 0;
 logic [63:0] video_q;
+logic [15:0] video_seed_q;
 integer header;
 
 gd_sprite_ram dut
 (
 	.clk, .reset, .buffer_trigger, .address, .data, .byte_enable,
-	.write, .q, .video_clk(clk), .video_address, .video_q, .buffer_busy
+	.write, .q, .video_clk(clk), .video_address, .video_q, .video_seed_q, .buffer_busy
 );
 
 task automatic write_word(input [16:0] a, input [15:0] d);
@@ -100,6 +101,17 @@ initial begin
 	expect_record(17'h00000, 64'ha003_a002_a001_a000);
 	write_word(17'h00003, 16'hd00d);
 	expect_record(17'h00000, 64'hd00d_a002_a001_a000);
+	// Raster word-2 edits stay live, but the seed belongs to the buffered
+	// descriptor generation and has identical video-address latency.
+	if (video_seed_q !== 16'ha002)
+		$fatal(1, "packed seed did not follow the video record address");
+	write_word(17'h00002, 16'h79f0);
+	expect_record(17'h00000, 64'hd00d_79f0_a001_a000);
+	if (video_seed_q !== 16'ha002)
+		$fatal(1, "live raster write overwrote the buffered descriptor seed");
+	expect_record(17'h00008, 64'hc003_c002_c001_c000);
+	if (video_seed_q !== 16'hc002)
+		$fatal(1, "packed seeds aliased adjacent descriptor generations");
 
 	// The attract game can issue 40 headers in one buffered list. Header 39
 	// must survive; a 32-entry cap truncates the late foreground/HUD groups.
