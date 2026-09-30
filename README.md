@@ -12,12 +12,10 @@ copyrighted game ROMs are included in this repository or its releases.
 
 ## Install
 
-1. Extract the release ZIP to the root of the MiSTer SD card. It installs
-   `_Arcade/cores/Guardians.rbf` and `_Arcade/Guardians (Denjin Makai II).mra`.
-   For a manual installation, copy `releases/Arcade-Guardians.rbf` as
+1. Select the desired Git tag and copy its `releases/Arcade-Guardians.rbf` as
    `/media/fat/_Arcade/cores/Guardians.rbf`, removing the `Arcade-` prefix
    as in MiSTer-devel distribution. The MRA uses the stable `Guardians` identifier.
-2. Copy `Guardians (Denjin Makai II).mra` to `/media/fat/_Arcade/`.
+2. Copy that tag's `releases/Guardians (Denjin Makai II).mra` to `/media/fat/_Arcade/`.
 3. Put a legally obtained, unmodified `grdians.zip` in
    `/media/fat/games/mame/`.
 4. Launch **Guardians / Denjin Makai II** from MiSTer's Arcade menu.
@@ -135,6 +133,9 @@ To package the committed undated release artifacts:
 
 The ROM-free ZIP and checksum manifest are written to `dist/v1.4/`. The ZIP
 contains only the matching MRA and `Guardians.rbf` in their MiSTer folders.
+This locally generated installation ZIP can be extracted to the SD-card root.
+GitHub's automatic source-code ZIP for a tag contains the whole repository;
+it is not an installation ZIP.
 
 ## Tests
 
@@ -228,6 +229,10 @@ their original notices and terms. See [`CREDITS.md`](CREDITS.md) and
 [`UPSTREAM.md`](UPSTREAM.md) for exact source provenance, and [`LICENSE`](LICENSE).
 
 ## Repository and releases
+
+Versioned builds are published as **Git tags only**, following the other
+MiSTer-devel versions. Do not create GitHub Release entries or upload release
+assets; the tagged repository's `releases/` folder supplies the RBF and MRA.
 
 The repository follows the MiSTer arcade-core layout: the repository and
 Quartus project use the `Arcade-Guardians` name, while `releases/` contains the

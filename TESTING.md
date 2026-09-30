@@ -7,7 +7,9 @@ The MiSTer-devel installation uses:
 
 For a manual installation, copy `releases/Arcade-Guardians.rbf` under
 that distribution filename. Keep `<rbf>Guardians</rbf>` in the upstream MRA.
-The release ZIP already has the correct folder layout and undated filenames.
+Versions are Git tags, not GitHub Releases. The locally generated installation
+ZIP already has the correct folder layout and undated filenames; GitHub's
+automatic source-code archive is not an SD-card installation ZIP.
 
 Place a legally obtained, unmodified `grdians.zip` at
 `games/mame/grdians.zip`. No ROM files are included in this archive.
