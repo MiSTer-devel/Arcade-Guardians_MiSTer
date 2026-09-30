@@ -15,6 +15,7 @@ logic [16:0] video_address = 0;
 logic [63:0] video_q;
 logic [15:0] video_seed_q;
 integer header;
+integer source_record;
 
 gd_sprite_ram dut
 (
@@ -158,7 +159,14 @@ initial begin
 			(header == 6) ? 16'h80ff : 16'h00ff);
 		write_word(17'h01800 + header * 4 + 1, 16'h0000);
 		write_word(17'h01800 + header * 4 + 2, 16'h0000);
-		write_word(17'h01800 + header * 4 + 3, 16'h8800);
+		write_word(17'h01800 + header * 4 + 3, 16'h8800 + header * 256);
+		for (source_record = 0; source_record < 256;
+		     source_record = source_record + 1) begin
+			write_word(17'h02000 + header * 1024 + source_record * 4,
+				16'ha000 + source_record);
+			write_word(17'h02002 + header * 1024 + source_record * 4,
+				header * 256 + source_record);
+		end
 	end
 	buffer_trigger <= 1'b1;
 	@(posedge clk);
@@ -170,6 +178,17 @@ initial begin
 	expect_record(17'h01818, 64'h8600_0000_0000_80ff);
 	if (dut.bank_memory[0][15'h0600] !== 16'h00ff)
 		$fatal(1, "packed sprite overflow overwrote the base list");
+	// All 1536 seeds must remain distinct across 512/1024-record boundaries.
+	// A truncated seed address silently corrupts late gameplay display groups.
+	for (source_record = 0; source_record < 1536;
+	     source_record = source_record + 1) begin
+		video_address <= source_record * 4;
+		repeat (2) @(posedge clk);
+		#1;
+		if (video_seed_q !== source_record[15:0])
+			$fatal(1, "packed seed address alias at record %0d: got %h",
+				source_record, video_seed_q);
+	end
 
 	$display("PASS gd_sprite_ram performed DX-101 list buffering");
 	$finish;
