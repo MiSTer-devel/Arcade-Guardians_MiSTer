@@ -23,7 +23,9 @@ if ($BuildDirectory) {
         throw 'Production release must not contain private test macros'
     }
     $fit = Get-Content -LiteralPath (Join-Path $outputPath 'Arcade-Guardians.fit.summary') -Raw
-    if ($fit -notmatch 'Successful' -or $fit -notmatch '0 errors') { throw 'Production fitting failed' }
+    $buildLog = Get-Content -LiteralPath (Join-Path $outputPath 'production-build.log') -Raw
+    if ($fit -notmatch 'Successful' -or $buildLog -notmatch 'Full Compilation was successful' -or
+        $buildLog -match '(?m)^Error') { throw 'Production compilation/fitting failed' }
     $timing = Get-Content -LiteralPath (Join-Path $outputPath 'Arcade-Guardians.sta.summary') -Raw
     if ($timing -notmatch 'Slack\s*:' -or $timing -match 'Slack\s*:\s*-') { throw 'Production internal timing failed' }
     $audit = Get-Content -LiteralPath (Join-Path $outputPath 'sdram-f0-audit.log') -Raw

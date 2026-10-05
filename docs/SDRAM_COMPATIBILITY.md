@@ -52,7 +52,8 @@ standard compressed assembler/CPF output, not a manually altered bitstream.
 
 The focused production tests cover DMA row boundaries, ordinary reads and
 four-command batched writes through both the behavioral sampler and Intel's
-primitive model. A shortened synthetic DQ window checks that the fixed F0
+primitive model. A 32 KiB pin-level sweep exercises all four banks, 32 physical
+rows, normal reads and controller reset. A shortened synthetic DQ window checks that the fixed F0
 path remains correct when a rising sample would be stale. Its delay values
 are an injected test fixture, not measured board calibration.
 

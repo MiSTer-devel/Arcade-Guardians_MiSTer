@@ -149,6 +149,11 @@ The focused RTL test suite uses Icarus Verilog 11 or newer:
 ./sim/run_unit_tests.ps1
 ```
 
+Use `-QuartusSimLib <Quartus installation>/quartus/eda/sim_lib` to run the
+SDRAM cases against Intel's ALTDDIO primitives as well as the behavioral
+sampler. Both include wide/short synthetic return windows, a 32 KiB four-bank
+memory sweep, normal reads and controller-reset recovery.
+
 Set `IVERILOG` and `VVP` to full executable paths if they are not on `PATH`.
 The suite covers CRT geometry syntax, analog-stick conversion, video timing,
 DDR access, registered

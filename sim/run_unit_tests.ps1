@@ -112,6 +112,20 @@ if ($QuartusSimLib) {
     }
 }
 
+$output = Join-Path $PSScriptRoot 'f0_production_rom.out'
+foreach ($shortWindow in @(0, 1)) {
+    & $iverilog -g2012 -s tb_gd_sdram_f0_rom "-Ptb_gd_sdram_f0_rom.SHORT_DQ_WINDOW=$shortWindow" -o $output rtl/gd_sdram.sv sim/tb_gd_sdram_f0_rom.sv
+    if ($LASTEXITCODE -ne 0) { throw 'Production F0 memory sweep compilation failed' }
+    & $vvp $output
+    if ($LASTEXITCODE -ne 0) { throw 'Production F0 memory sweep failed' }
+    if ($QuartusSimLib) {
+        & $iverilog -g2012 -DSYNTHESIS -s tb_gd_sdram_f0_rom "-Ptb_gd_sdram_f0_rom.SHORT_DQ_WINDOW=$shortWindow" -o $output rtl/gd_sdram.sv sim/tb_gd_sdram_f0_rom.sv $vendorLibrary
+        if ($LASTEXITCODE -ne 0) { throw 'Vendor F0 memory sweep compilation failed' }
+        & $vvp $output
+        if ($LASTEXITCODE -ne 0) { throw 'Vendor F0 memory sweep failed' }
+    }
+}
+
 $output = Join-Path $PSScriptRoot 'dx101_video.out'
 & $iverilog -g2012 -s tb_gd_dx101_video -o $output rtl/gd_dx101_video.sv sim/tb_gd_dx101_video.sv
 if ($LASTEXITCODE -ne 0) { throw 'DX-101 video unit-test compilation failed' }
