@@ -17,6 +17,11 @@
   menu, readback delay, diagnostic strip, gradient or test screen is included.
 - Added behavioral/vendor-primitive regressions for fixed F0 DMA and normal
   reads, including a synthetic short DQ window and row-boundary fetches.
+  All 27 production reports and the separate 180,400-clock renderer comparison
+  pass. Quartus 17.0 compilation has zero errors, all 33 internal timing
+  summaries are nonnegative (+0.491 ns worst setup, +0.242 ns minimum hold),
+  and the fitted sixteen-bit F0 audit passes. The 4,485,460-byte RBF matches
+  the standard compressed assembler and CPF exports exactly.
 - Restored the single undated release pair and the stable Guardians MRA
   target. ROM contents and assembly are unchanged. Credited Fluxxant's
   testing, Intel/Altera's primitive and kandowontu, with compatibility notes

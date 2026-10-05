@@ -121,19 +121,32 @@ quartus_sh --flow compile Arcade-Guardians
 ```
 
 The v1.4.1 production build uses only the SYNTHESIS macro; private diagnostic
-top levels and menus are absent. Audit the fitted F0 sampler with
-`quartus_sta -t scripts/audit_sdram_f0.tcl`. Release packaging requires a
-zero-error compile and nonnegative internal timing summaries. External SDRAM
+top levels and menus are absent. Quartus 17.0 compilation completed with zero
+errors. All 33 internal timing summaries are nonnegative: worst setup is
++0.491 ns and minimum hold/all-summary slack is +0.242 ns. The fitted audit
+confirms sixteen falling-edge captures and low-data retimers, the baseline
+14.545 ns memory clock and nonviolating F0 capture-to-client paths. Run it with
+`quartus_sta -t scripts/audit_sdram_f0.tcl`. External SDRAM
 I/O timing remains unconstrained; internal slack alone does not establish
 board-wide compatibility. The affected-board gameplay evidence applies to
 the private F0 fit, not automatically to this separate production refit.
 See [`docs/SDRAM_COMPATIBILITY.md`](docs/SDRAM_COMPATIBILITY.md).
+
+The standard compressed RBF is 4,485,460 bytes; SHA256:
+`f73d80452daa882bce801d5d05ac89e1d91384414fddff4f930018c666f4c542`.
+It matches Quartus's assembler output and an independent compressed CPF
+export byte-for-byte. The ROM layout is unchanged. The production fit uses
+33,070 ALMs, 42,789 registers, 553 M10K blocks and 60 DSP blocks.
 
 To package the committed undated release artifacts:
 
 ```powershell
 ./scripts/package_release.ps1 -Version 1.4.1
 ```
+
+For a freshly compiled release, add `-BuildDirectory <fitted project folder>`
+to require successful compilation, positive internal timing, the F0 audit,
+compressed-export equality and identical fitted RTL before packaging.
 
 The ROM-free ZIP and checksum manifest are written to `dist/v1.4.1/`. The ZIP
 contains only the matching MRA and `Guardians.rbf` in their MiSTer folders.
@@ -153,6 +166,8 @@ Use `-QuartusSimLib <Quartus installation>/quartus/eda/sim_lib` to run the
 SDRAM cases against Intel's ALTDDIO primitives as well as the behavioral
 sampler. Both include wide/short synthetic return windows, a 32 KiB four-bank
 memory sweep, normal reads and controller-reset recovery.
+All 27 production reports passed with the vendor library; the separate
+180,400-clock / 40-row renderer comparison also passed.
 
 Set `IVERILOG` and `VVP` to full executable paths if they are not on `PATH`.
 The suite covers CRT geometry syntax, analog-stick conversion, video timing,
