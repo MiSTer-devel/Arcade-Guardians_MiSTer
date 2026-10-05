@@ -99,9 +99,10 @@ gd_analog_to_digital analog_p2
 
 wire clk_sys;
 wire pll_locked;
+wire clk_sdram_forward;
 pll pll
 (
-	.refclk(CLK_50M), .rst(1'b0), .outclk_0(),
+	.refclk(CLK_50M), .rst(1'b0), .outclk_0(clk_sdram_forward),
 	.outclk_1(clk_sys), .locked(pll_locked)
 );
 
@@ -178,7 +179,8 @@ wire sdram_dma_ack;
 
 gd_sdram graphics_sdram
 (
-	.clk(clk_sys), .reset(cold_reset), .SDRAM_DQ, .SDRAM_A, .SDRAM_BA,
+	.clk(clk_sys), .clk_forward(clk_sdram_forward),
+	.reset(cold_reset), .SDRAM_DQ, .SDRAM_A, .SDRAM_BA,
 	.SDRAM_CLK, .SDRAM_CKE, .SDRAM_DQML, .SDRAM_DQMH, .SDRAM_nCS,
 	.SDRAM_nWE, .SDRAM_nCAS, .SDRAM_nRAS,
 	.mem_addr(sdram_mem_addr), .mem_din(sdram_mem_din),

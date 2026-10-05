@@ -1,7 +1,8 @@
 # Arcade: Guardians / Denjin Makai II for MiSTer
 
-Version 1.4 corrects the stage-map zoom, the Stage 1 fire-background boundary,
-and the remaining corrupted flame-kick transition frame. It is a native FPGA implementation of
+Version 1.4.1 adopts the fixed falling-edge SDRAM capture validated by an
+affected MiSTer Pi tester, retaining v1.4's stage-map, fire-background boundary
+and flame-kick fixes. It is a native FPGA implementation of
 Winkysoft's 1995 arcade game,
 licensed to Banpresto,
 *Guardians / Denjin Makai II* for the MiSTer DE10-Nano platform.
@@ -119,19 +120,22 @@ The release was built with Quartus Prime Lite 17.0 for the Cyclone V
 quartus_sh --flow compile Arcade-Guardians
 ```
 
-The v1.4 RBF closes all analyzed setup, hold, recovery, removal, and minimum
-pulse-width timing classes. System-clock setup slack is +0.805 ns, HDMI setup
-slack is +0.277 ns, and minimum hold slack is +0.245 ns; all reported total
-negative slack values are zero. Its contents are the exact user-tested v1.4
-bitstream; release packaging does not rebuild or modify it.
+The v1.4.1 production build uses only the SYNTHESIS macro; private diagnostic
+top levels and menus are absent. Audit the fitted F0 sampler with
+`quartus_sta -t scripts/audit_sdram_f0.tcl`. Release packaging requires a
+zero-error compile and nonnegative internal timing summaries. External SDRAM
+I/O timing remains unconstrained; internal slack alone does not establish
+board-wide compatibility. The affected-board gameplay evidence applies to
+the private F0 fit, not automatically to this separate production refit.
+See [`docs/SDRAM_COMPATIBILITY.md`](docs/SDRAM_COMPATIBILITY.md).
 
 To package the committed undated release artifacts:
 
 ```powershell
-./scripts/package_release.ps1 -Version 1.4
+./scripts/package_release.ps1 -Version 1.4.1
 ```
 
-The ROM-free ZIP and checksum manifest are written to `dist/v1.4/`. The ZIP
+The ROM-free ZIP and checksum manifest are written to `dist/v1.4.1/`. The ZIP
 contains only the matching MRA and `Guardians.rbf` in their MiSTer folders.
 This locally generated installation ZIP can be extracted to the SD-card root.
 GitHub's automatic source-code ZIP for a tag contains the whole repository;

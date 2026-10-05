@@ -40,6 +40,7 @@ PLLJ_PLLSPE_INFO.txt
 *.ppf
 *.ddb
 build_id.v
+sim/hps_io_icarus.sv
 c5_pin_model_dump.txt
 *.sopcinfo
 *.csv

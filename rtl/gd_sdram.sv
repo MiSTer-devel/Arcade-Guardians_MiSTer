@@ -9,6 +9,7 @@
 module gd_sdram
 (
 	input  logic        clk,
+	input  wire         clk_forward,
 	input  logic        reset,
 
 	inout  wire  [15:0] SDRAM_DQ,
@@ -96,12 +97,11 @@ logic [63:0] latched_burst_data;
 logic [2:0]  burst_write_word;
 logic [15:0] dq_out;
 logic        dq_oe = 1'b0;
-// Keep one fixed capture register between the SDRAM pins and all controller
-// clients. This is the same structure used by established MiSTer SDRAM
-// controllers and lets Quartus place all sixteen bits in their input I/O
-// cells. Writing SDRAM_DQ directly into a variable burst slice can leave
-// three of the four row words captured in core logic instead.
-logic [15:0] dq_capture;
+// Use the falling-edge input sample, retimed onto clk's rising edge, for
+// every read client. Full-ROM comparisons on an affected MiSTer Pi returned
+// the correct CRC through F0 but not R0. Keep CAS3/BL4 client alignment intact;
+// neither the forwarded clock nor its phase is switched at runtime.
+wire [15:0] dq_capture;
 
 // The core, loader, graphics arbiter and this controller all use clk_sys.
 // Keep the toggle payload direct; the previous two-stage synchronizer was a
@@ -147,7 +147,7 @@ sdram_clock_out
 (
 	.datain_h(1'b0),
 	.datain_l(1'b1),
-	.outclock(clk),
+	.outclock(clk_forward),
 	.dataout(SDRAM_CLK),
 	.aclr(1'b0),
 	.aset(1'b0),
@@ -160,7 +160,7 @@ sdram_clock_out
 // The synthesized ALTDDIO instance forwards an inverted clock: commands and
 // DQ change on clk's rising edge, then the SDRAM samples them half a cycle
 // later on SDRAM_CLK's rising edge.
-assign SDRAM_CLK = ~clk;
+assign SDRAM_CLK = ~clk_forward;
 `endif
 
 // Keep the shared DQ output enable as a simple, always-loaded register. This
@@ -173,12 +173,22 @@ always_ff @(posedge clk) begin
 	          || (state == ST_BURST_WRITE));
 end
 
-always_ff @(posedge clk) begin
-	if (reset)
-		dq_capture <= 16'd0;
-	else
-		dq_capture <= SDRAM_DQ;
-end
+`ifdef SYNTHESIS
+altddio_in #(
+	.intended_device_family("Cyclone V"), .lpm_type("altddio_in"),
+	.width(16), .power_up_high("OFF")
+) sdram_input_samples (
+	.datain(SDRAM_DQ), .inclock(clk), .inclocken(1'b1),
+	.aclr(1'b0), .aset(1'b0), .sclr(1'b0), .sset(1'b0),
+	.dataout_h(), .dataout_l(dq_capture)
+);
+`else
+// Match ALTDDIO_IN's low-data retimer, not a direct negedge-to-client path.
+logic [15:0] negative_sample, sampled_low;
+always @(negedge clk) negative_sample <= SDRAM_DQ;
+always @(posedge clk) sampled_low <= negative_sample;
+assign dq_capture = sampled_low;
+`endif
 
 always_ff @(posedge clk) begin
 	command    <= CMD_NOP;

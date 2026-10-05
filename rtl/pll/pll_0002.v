@@ -22,7 +22,9 @@ module  pll_0002(
 		.reference_clock_frequency("50.0 MHz"),
 		.operation_mode("direct"),
 		.number_of_clocks(2),
-		.output_clock_frequency0("0 MHz"),
+		// Separate fixed forwarded-clock output, as in the verified F0 test.
+		// ALTDDIO_OUT inverts it; both PLL outputs remain 68.75 MHz / 0 ps.
+		.output_clock_frequency0("68.75 MHz"),
 		.phase_shift0("0 ps"),
 		.duty_cycle0(50),
 		.output_clock_frequency1("68.75 MHz"),
@@ -87,4 +89,3 @@ module  pll_0002(
 		.refclk	(refclk)
 	);
 endmodule
-

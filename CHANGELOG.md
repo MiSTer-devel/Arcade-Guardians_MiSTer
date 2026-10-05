@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.4.1 - 2026-10-05
+
+- Adopted fixed falling-edge SDRAM input capture, retimed onto the controller
+  clock with Intel/Altera ALTDDIO_IN. All normal reads and graphics DMA use
+  the same F0 sample; CAS3/BL4 alignment and the nominal 68.75 MHz/180-degree
+  memory timing are unchanged. The tested separate forwarded PLL output is
+  retained, without a runtime clock or capture selector.
+- Fluxxant's affected MiSTer Pi reproduced the expected full 32 MiB graphics
+  CRC CA9926D0 through F0 while R0 returned E7BB712B, and the fixed-F0 private
+  fit was reported clean during gameplay. Earlier comparisons verified F0
+  readback with both batched and single-word loader writes. This production
+  refit is distinct from the private tested binary; universal compatibility
+  and external SDRAM I/O timing closure are not claimed.
+- Kept the fast batched loader and all v1.4 rendering fixes. No private test
+  menu, readback delay, diagnostic strip, gradient or test screen is included.
+- Added behavioral/vendor-primitive regressions for fixed F0 DMA and normal
+  reads, including a synthetic short DQ window and row-boundary fetches.
+- Restored the single undated release pair and the stable Guardians MRA
+  target. ROM contents and assembly are unchanged. Credited Fluxxant's
+  testing, Intel/Altera's primitive and kandowontu, with compatibility notes
+  for developers investigating similar board-dependent corruption.
+
 ## 1.4 - 2026-09-29
 
 - Corrected fractional X/Y scaling and source phase on the stage-map/loading

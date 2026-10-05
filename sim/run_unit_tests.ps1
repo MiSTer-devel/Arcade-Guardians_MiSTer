@@ -1,3 +1,4 @@
+param([string]$QuartusSimLib = '')
 $ErrorActionPreference = 'Stop'
 $iverilog = if ($env:IVERILOG) {
     $env:IVERILOG
@@ -94,6 +95,22 @@ $output = Join-Path $PSScriptRoot 'sdram_dma.out'
 if ($LASTEXITCODE -ne 0) { throw 'SDRAM DMA unit-test compilation failed' }
 & $vvp $output
 if ($LASTEXITCODE -ne 0) { throw 'SDRAM DMA unit test failed' }
+
+# Fixed-F0 production capture must also work when R0 would see stale data.
+& $iverilog -g2012 -s tb_gd_sdram_dma '-Ptb_gd_sdram_dma.SHORT_DQ_WINDOW=1' -o $output rtl/gd_sdram.sv sim/tb_gd_sdram_dma.sv
+if ($LASTEXITCODE -ne 0) { throw 'Short-window F0 compilation failed' }
+& $vvp $output
+if ($LASTEXITCODE -ne 0) { throw 'Short-window F0 DMA/read test failed' }
+if ($QuartusSimLib) {
+    $vendorLibrary = Join-Path $QuartusSimLib 'altera_mf.v'
+    if (-not (Test-Path -LiteralPath $vendorLibrary)) { throw 'Missing Intel simulation library' }
+    foreach ($shortWindow in @(0, 1)) {
+        & $iverilog -g2012 -DSYNTHESIS -s tb_gd_sdram_dma "-Ptb_gd_sdram_dma.SHORT_DQ_WINDOW=$shortWindow" -o $output rtl/gd_sdram.sv sim/tb_gd_sdram_dma.sv $vendorLibrary
+        if ($LASTEXITCODE -ne 0) { throw 'Vendor F0 primitive compilation failed' }
+        & $vvp $output
+        if ($LASTEXITCODE -ne 0) { throw 'Vendor F0 DMA/read test failed' }
+    }
+}
 
 $output = Join-Path $PSScriptRoot 'dx101_video.out'
 & $iverilog -g2012 -s tb_gd_dx101_video -o $output rtl/gd_dx101_video.sv sim/tb_gd_dx101_video.sv

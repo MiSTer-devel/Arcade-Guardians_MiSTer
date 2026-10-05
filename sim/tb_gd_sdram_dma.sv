@@ -1,7 +1,8 @@
 `timescale 1ns/1ps
 
-module tb_gd_sdram_dma;
+module tb_gd_sdram_dma #(parameter bit SHORT_DQ_WINDOW = 0);
 logic clk = 1'b0;
+logic clk_forward = 1'b0;
 logic reset = 1'b1;
 tri [15:0] SDRAM_DQ;
 logic [15:0] external_dq = 16'h0000;
@@ -38,14 +39,20 @@ logic [8:0] written_column [0:3];
 logic [1:0] written_bank [0:3];
 logic written_autoprecharge [0:3];
 
-always #4.365 clk = ~clk;
+localparam real HALF_PERIOD = 1000.0 / 68.75 / 2.0;
+always #(HALF_PERIOD) clk = ~clk;
+// Controlled pin-return window used by the F0 comparison, not calibrated
+// board timing: forwarded edge leads by 4 ns, then DQ returns after 3 ns.
+initial begin
+	#(HALF_PERIOD - 4.0) clk_forward = 1;
+	forever #(HALF_PERIOD) clk_forward = ~clk_forward;
+end
 
 gd_sdram dut(.*);
 assign SDRAM_DQ = dut.dq_oe ? 16'hzzzz : external_dq;
 
 // Minimal CAS-3, burst-length-4 SDRAM read model. Commands are sampled on
-// the forwarded SDRAM clock and returned data is changed on that same edge,
-// leaving it centered around the controller's following clk rising edge.
+// the forwarded SDRAM clock; DQ arrives 3 ns later, before the F0 sample.
 always @(posedge SDRAM_CLK) begin
 	sdram_cycle = sdram_cycle + 1;
 	if ({SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} == 3'b100) begin
@@ -64,20 +71,22 @@ always @(posedge SDRAM_CLK) begin
 	end
 	if ((sdram_cycle >= read_start0) && (sdram_cycle < read_start0 + 4)) begin
 		case (sdram_cycle - read_start0)
-			0: external_dq = 16'h1122;
-			1: external_dq = 16'h3344;
-			2: external_dq = 16'h5566;
-			default: external_dq = 16'h7788;
+			0: external_dq <= #3 16'h1122;
+			1: external_dq <= #3 16'h3344;
+			2: external_dq <= #3 16'h5566;
+			default: external_dq <= #3 16'h7788;
 		endcase
+		if (SHORT_DQ_WINDOW) external_dq <= #8 16'hdead;
 	end
 	else if ((sdram_cycle >= read_start1)
 	         && (sdram_cycle < read_start1 + 4)) begin
 		case (sdram_cycle - read_start1)
-			0: external_dq = 16'h1122;
-			1: external_dq = 16'h3344;
-			2: external_dq = 16'h5566;
-			default: external_dq = 16'h7788;
+			0: external_dq <= #3 16'h1122;
+			1: external_dq <= #3 16'h3344;
+			2: external_dq <= #3 16'h5566;
+			default: external_dq <= #3 16'h7788;
 		endcase
+		if (SHORT_DQ_WINDOW) external_dq <= #8 16'hdead;
 	end
 end
 
@@ -119,6 +128,8 @@ initial begin
 	if (same_row_dma_clocks != first_dma_clocks)
 		$fatal(1, "closed-page DMA latency changed first=%0d same=%0d",
 		       first_dma_clocks, same_row_dma_clocks);
+	if (video_dma_data !== 64'h7788_5566_3344_1122)
+		$fatal(1, "same-row DMA data=%h", video_dma_data);
 
 	// Crossing the 1 KiB row boundary uses the same auto-precharged sequence
 	// and must still return the complete burst correctly.
@@ -170,7 +181,19 @@ initial begin
 			$fatal(1, "loader auto-precharge[%0d]=%b", timeout,
 			       written_autoprecharge[timeout]);
 	end
-	$display("PASS gd_sdram DMA closed-page and four-command block writes");
+	// The ordinary CPU/loader read path must use the same F0 sampler.
+	@(negedge clk);
+	mem_burst = 1'b0;
+	mem_rnw = 1'b1;
+	mem_req = ~mem_req;
+	timeout = 0;
+	while ((mem_ack != mem_req) && timeout < 100) begin
+		@(posedge clk);
+		timeout = timeout + 1;
+	end
+	if (mem_ack != mem_req || mem_dout !== 16'h1122)
+		$fatal(1, "ordinary F0 read failed ack=%b data=%h", mem_ack, mem_dout);
+	$display("PASS gd_sdram F0 DMA, ordinary read and four-command block writes");
 	$finish;
 end
 endmodule

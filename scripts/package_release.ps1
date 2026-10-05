@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^\d+\.\d+(\.\d+)?$')]
     [string]$Version,
-    [string]$OutputDirectory
+    [string]$OutputDirectory,
+    [string]$BuildDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +15,42 @@ $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 $releasesPath = Join-Path $projectRoot 'releases'
 $rbfPath = Join-Path $releasesPath 'Arcade-Guardians.rbf'
 $mraPath = Join-Path $releasesPath 'Guardians (Denjin Makai II).mra'
+if ($BuildDirectory) {
+    $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
+    $outputPath = Join-Path $BuildDirectory 'output_files'
+    $settings = Get-Content -LiteralPath (Join-Path $BuildDirectory 'Arcade-Guardians.qsf') -Raw
+    if ($settings -match 'GUARDIANS_SDRAM_|VERILOG_MACRO\s+"?(?!SYNTHESIS=1)[A-Z_]+=') {
+        throw 'Production release must not contain private test macros'
+    }
+    $fit = Get-Content -LiteralPath (Join-Path $outputPath 'Arcade-Guardians.fit.summary') -Raw
+    if ($fit -notmatch 'Successful' -or $fit -notmatch '0 errors') { throw 'Production fitting failed' }
+    $timing = Get-Content -LiteralPath (Join-Path $outputPath 'Arcade-Guardians.sta.summary') -Raw
+    if ($timing -notmatch 'Slack\s*:' -or $timing -match 'Slack\s*:\s*-') { throw 'Production internal timing failed' }
+    $audit = Get-Content -LiteralPath (Join-Path $outputPath 'sdram-f0-audit.log') -Raw
+    if ($audit -notmatch 'PASS: sixteen fixed F0 input captures' -or $audit -match '(?m)^Error') {
+        throw 'Production F0 fitted audit failed'
+    }
+    $conversion = Get-Content -LiteralPath (Join-Path $outputPath 'sdram-f0-convert.log') -Raw
+    if ($conversion -notmatch 'successful' -or $conversion -notmatch 'bitstream_compression=on') {
+        throw 'Standard compressed export not verified'
+    }
+    $assembled = Join-Path $outputPath 'Arcade-Guardians.rbf'
+    $converted = Join-Path $outputPath 'Guardians.rbf'
+    $releaseHash = (Get-FileHash -LiteralPath $rbfPath).Hash
+    if ($releaseHash -ne (Get-FileHash -LiteralPath $assembled).Hash -or
+        $releaseHash -ne (Get-FileHash -LiteralPath $converted).Hash) {
+        throw 'Release RBF must equal the standard assembler and compressed CPF output'
+    }
+    foreach ($sourceFile in @('Arcade-Guardians.sv', 'Arcade-Guardians.qsf', 'files.qip') +
+        @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'rtl') -Recurse -File |
+            Where-Object { $_.Extension -in '.sv', '.v', '.qip' } |
+            ForEach-Object { $_.FullName.Substring($projectRoot.Length + 1) })) {
+        if ((Get-FileHash -LiteralPath (Join-Path $projectRoot $sourceFile)).Hash -ne
+            (Get-FileHash -LiteralPath (Join-Path $BuildDirectory $sourceFile)).Hash) {
+            throw "Fitted source differs from current source: $sourceFile"
+        }
+    }
+}
 $releaseFiles = @(Get-ChildItem -LiteralPath $releasesPath -File -Recurse)
 if ($releaseFiles.Count -ne 2 -or
     -not (Test-Path -LiteralPath $rbfPath -PathType Leaf) -or
