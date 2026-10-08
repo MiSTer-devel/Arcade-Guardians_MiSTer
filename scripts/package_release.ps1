@@ -13,8 +13,29 @@ if (-not $OutputDirectory) {
 }
 $OutputDirectory = [System.IO.Path]::GetFullPath($OutputDirectory)
 $releasesPath = Join-Path $projectRoot 'releases'
-$rbfPath = Join-Path $releasesPath 'Arcade-Guardians.rbf'
 $mraPath = Join-Path $releasesPath 'Guardians (Denjin Makai II).mra'
+$releaseFiles = @(Get-ChildItem -LiteralPath $releasesPath -File -Recurse)
+$releaseRbfs = @($releaseFiles | Where-Object {
+    $_.DirectoryName -eq $releasesPath -and $_.Name -cmatch '^Arcade-Guardians_[0-9]{8}\.rbf$'
+})
+if ($releaseFiles.Count -ne 2 -or $releaseRbfs.Count -ne 1 -or
+    -not (Test-Path -LiteralPath $mraPath -PathType Leaf)) {
+    throw 'releases/ must contain exactly one Arcade-Guardians_YYYYMMDD.rbf and its matching undated MRA'
+}
+$rbfPath = $releaseRbfs[0].FullName
+$buildDateText = $releaseRbfs[0].BaseName.Substring('Arcade-Guardians_'.Length)
+$buildDate = [datetime]::MinValue
+if (-not [datetime]::TryParseExact($buildDateText, 'yyyyMMdd',
+    [System.Globalization.CultureInfo]::InvariantCulture,
+    [System.Globalization.DateTimeStyles]::None, [ref]$buildDate)) {
+    throw 'The release RBF suffix must be a valid YYYYMMDD build date'
+}
+# MiSTer-devel distribution removes only Arcade-, retaining the build date.
+$installedRbfName = $releaseRbfs[0].Name.Substring('Arcade-'.Length)
+[xml]$mra = Get-Content -LiteralPath $mraPath -Raw
+if ($mra.misterromdescription.rbf -cne 'Guardians') {
+    throw 'The MRA must target Guardians, without the Arcade- prefix, date or extension'
+}
 if ($BuildDirectory) {
     $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
     $outputPath = Join-Path $BuildDirectory 'output_files'
@@ -36,6 +57,14 @@ if ($BuildDirectory) {
     if ($conversion -notmatch 'successful' -or $conversion -notmatch 'bitstream_compression=on') {
         throw 'Standard compressed export not verified'
     }
+    $fitDateText = [regex]::Match($fit, '(?m)^Fitter Status : Successful - (.+)$').Groups[1].Value.Trim()
+    $fitDate = [datetime]::MinValue
+    if (-not [datetime]::TryParseExact($fitDateText, 'ddd MMM dd HH:mm:ss yyyy',
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::None, [ref]$fitDate) -or
+        $fitDate.Date -ne $buildDate.Date) {
+        throw 'The dated release filename must match the fitted build date'
+    }
     $assembled = Join-Path $outputPath 'Arcade-Guardians.rbf'
     $converted = Join-Path $outputPath 'Guardians.rbf'
     $releaseHash = (Get-FileHash -LiteralPath $rbfPath).Hash
@@ -52,16 +81,6 @@ if ($BuildDirectory) {
             throw "Fitted source differs from current source: $sourceFile"
         }
     }
-}
-$releaseFiles = @(Get-ChildItem -LiteralPath $releasesPath -File -Recurse)
-if ($releaseFiles.Count -ne 2 -or
-    -not (Test-Path -LiteralPath $rbfPath -PathType Leaf) -or
-    -not (Test-Path -LiteralPath $mraPath -PathType Leaf)) {
-    throw 'releases/ must contain exactly Arcade-Guardians.rbf and its matching undated MRA'
-}
-[xml]$mra = Get-Content -LiteralPath $mraPath -Raw
-if ($mra.misterromdescription.rbf -ne 'Guardians') {
-    throw 'The MRA must target the installed Guardians.rbf filename'
 }
 
 $zipName = "Arcade-Guardians_MiSTer_v$Version.zip"
@@ -81,7 +100,7 @@ try {
         $archive, $mraPath, '_Arcade/Guardians (Denjin Makai II).mra',
         [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
     [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-        $archive, $rbfPath, '_Arcade/cores/Guardians.rbf',
+        $archive, $rbfPath, "_Arcade/cores/$installedRbfName",
         [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
 }
 finally {
@@ -92,7 +111,7 @@ $rbfHash = (Get-FileHash -LiteralPath $rbfPath -Algorithm SHA256).Hash.ToLowerIn
 $mraHash = (Get-FileHash -LiteralPath $mraPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $checksums = @(
-    "$rbfHash  _Arcade/cores/Guardians.rbf",
+    "$rbfHash  _Arcade/cores/$installedRbfName",
     "$mraHash  _Arcade/Guardians (Denjin Makai II).mra",
     "$zipHash  $zipName"
 )

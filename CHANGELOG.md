@@ -1,5 +1,21 @@
 # Changelog
 
+## Distribution packaging correction - 2026-10-07
+
+- Renamed the existing October 5 v1.4.1 production binary to
+  `Arcade-Guardians_20261005.rbf` so MiSTer-devel's distribution generator can
+  discover it. RBF contents, HDL, ROM assembly and the MRA are unchanged;
+  `<rbf>Guardians</rbf>` remains the correct stable identifier.
+- Installation ZIPs now retain the date as `Guardians_20261005.rbf` while
+  stripping only `Arcade-`, matching the official distribution layout.
+  Packaging rejects undated/duplicate/invalid-date binaries and can verify
+  the filename's build date against the fitted report.
+- Added ten release-packaging regression checks. Verified discovery and
+  installed paths with a dry-run of the official distribution helpers using
+  Linux path semantics; no distribution files were changed.
+- Corrected the stale repository checksum manifest and current installation
+  documentation. Existing Git tags and earlier local ZIPs remain unchanged.
+
 ## 1.4.1 - 2026-10-05
 
 - Adopted fixed falling-edge SDRAM input capture, retimed onto the controller

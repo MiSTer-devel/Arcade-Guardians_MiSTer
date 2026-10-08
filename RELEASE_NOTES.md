@@ -1,10 +1,29 @@
-# Arcade-Guardians MiSTer 1.4
+# Arcade-Guardians MiSTer 1.4.1
 
 Native MiSTer FPGA core for Winkysoft's 1995 arcade game
 *Guardians / Denjin Makai II*, licensed to Banpresto.
 
-User-tested build dated September 29, 2026. The official repository is
+Production build dated October 5, 2026, with a distribution-naming correction
+on October 7. The official repository is
 [MiSTer-devel/Arcade-Guardians_MiSTer](https://github.com/MiSTer-devel/Arcade-Guardians_MiSTer).
+
+## Changes in 1.4.1
+
+- Fixed falling-edge SDRAM capture using Intel/Altera ALTDDIO_IN, retimed onto
+  the controller clock for both normal reads and graphics DMA. The fast
+  batched loader and all v1.4 rendering fixes are retained.
+- Fluxxant's affected MiSTer Pi confirmed clean gameplay in the private F0
+  fit: expected full 32 MiB CRC `CA9926D0` was reproduced by F0, while R0
+  returned `E7BB712B`. This separate production refit still awaits hardware
+  confirmation; universal compatibility and external SDRAM I/O closure are
+  not claimed. See `docs/SDRAM_COMPATIBILITY.md`.
+- All 27 production reports and the 180,400-clock renderer comparison passed.
+  Quartus 17.0 compilation has zero errors, all 33 internal timing summaries
+  are nonnegative (+0.491 ns worst setup, +0.242 ns minimum hold), and the
+  sixteen-bit F0 fitted audit passes.
+- The October 7 packaging correction retains the actual October 5 build date
+  in the RBF filename, matching MiSTer-devel distribution. RBF and MRA bytes
+  are unchanged; existing tags and earlier local ZIPs are not overwritten.
 
 ## Changes in 1.4
 
@@ -24,7 +43,7 @@ checked green-character frames matched the normal baseline exactly. A further
 296-frame Stage 1 capture kept the HUD visible. The user confirmed the build
 before release. Exact PCB sprite-overload behavior remains unverified.
 
-Quartus Prime Lite 17.0 compilation completed with zero errors and positive
+The historical v1.4 Quartus Prime Lite 17.0 compilation completed with zero errors and positive
 timing margins: +0.805 ns system setup, +0.277 ns HDMI setup, +0.245 ns minimum
 hold, and zero reported total negative slack.
 
@@ -44,16 +63,15 @@ existing validation results and limitations.
 
 ## Current staged files
 
-- `releases/Arcade-Guardians.rbf`
+- `releases/Arcade-Guardians_20261005.rbf`
 - `releases/Guardians (Denjin Makai II).mra`
 
-The RBF is byte-for-byte identical to the user-tested
-[v1.4 release](https://github.com/kandowontu2/Arcade-Guardians_MiSTer/releases/tag/v1.4),
-SHA-256 `da1e85d386d8df0c822aae81006f39905b66fa7263d3165a64fc021a54b22de4`.
-The release folder contains only this undated RBF/MRA pair. The ZIP installs
-`_Arcade/cores/Guardians.rbf` and `_Arcade/Guardians (Denjin Makai II).mra`.
-Older dated builds remain available in Git history. Both MRAs
-retain the stable `Guardians` identifier, horizontal rotation and Shot button
+The RBF is byte-for-byte identical to the original v1.4.1 production binary,
+SHA-256 `f73d80452daa882bce801d5d05ac89e1d91384414fddff4f930018c666f4c542`.
+The release folder contains only this dated RBF/undated MRA pair. The ZIP installs
+`_Arcade/cores/Guardians_20261005.rbf` and `_Arcade/Guardians (Denjin Makai II).mra`.
+Older builds remain available in Git history. The MRA
+retains the stable `Guardians` identifier, horizontal rotation and Shot button
 label; project links point to the official repository. ROM assembly is unchanged.
 
 Follow the file-copy instructions in `README.md`. `SHA256SUMS.txt` contains
@@ -112,6 +130,8 @@ The following highlights and exact timing/test results describe the earlier
 
 - Core RTL, MiSTer integration, tests, and documentation: OpenAI Codex
 - Hardware testing, direction, game validation, and release: kandowontu
+- MiSTer Pi compatibility testing: Fluxxant
+- Distribution naming guidance: TheJesusFish and MiSTer-devel maintainers
 - Original game: Winkysoft, under license to Banpresto
 - Original P-FG01-1 board: its original engineers and hardware designers
 - fx68k 68000-compatible core: Jorge Cwik

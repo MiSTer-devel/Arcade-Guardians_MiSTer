@@ -1,14 +1,16 @@
-# Arcade-Guardians MiSTer 1.4 - validation checklist
+# Arcade-Guardians MiSTer 1.4.1 - validation checklist
 
 The MiSTer-devel installation uses:
 
 - `_Arcade/Guardians (Denjin Makai II).mra`
-- `_Arcade/cores/Guardians.rbf`
+- `_Arcade/cores/Guardians_20261005.rbf`
 
-For a manual installation, copy `releases/Arcade-Guardians.rbf` under
-that distribution filename. Keep `<rbf>Guardians</rbf>` in the upstream MRA.
+For a manual installation, copy `releases/Arcade-Guardians_20261005.rbf` under
+that distribution filename, removing only `Arcade-` and retaining the date.
+Remove an old undated `Guardians.rbf` from a previous manual installation.
+Keep `<rbf>Guardians</rbf>` in the upstream MRA.
 Versions are Git tags, not GitHub Releases. The locally generated installation
-ZIP already has the correct folder layout and undated filenames; GitHub's
+ZIP has the correct folder layout, dated RBF and undated MRA; GitHub's
 automatic source-code archive is not an SD-card installation ZIP.
 
 Place a legally obtained, unmodified `grdians.zip` at
@@ -52,6 +54,19 @@ scaler/scandoubler settings), MiSTer.ini video options, SDRAM module, controller
 the exact scene, and a short video or screenshot when possible.
 
 Release hashes are recorded in `SHA256SUMS.txt`.
+
+## Recorded v1.4.1 validation
+
+- All 27 production reports and the separate 180,400-clock renderer comparison
+  passed. Quartus 17.0 compilation has zero errors; all 33 internal timing
+  summaries are nonnegative (+0.491 ns worst setup, +0.242 ns minimum hold).
+- The fitted sixteen-bit F0 capture audit passed; external SDRAM I/O timing
+  remains unconstrained. Fluxxant's affected MiSTer Pi confirmed the private
+  fixed-F0 test fit; the separate production refit still needs hardware
+  confirmation. See `docs/SDRAM_COMPATIBILITY.md` for evidence and limits.
+- The October 7 distribution-naming correction changes no RBF or MRA bytes.
+  Production RBF SHA-256:
+  `f73d80452daa882bce801d5d05ac89e1d91384414fddff4f930018c666f4c542`.
 
 ## Recorded v1.4 validation
 

@@ -13,13 +13,19 @@ copyrighted game ROMs are included in this repository or its releases.
 
 ## Install
 
-1. Select the desired Git tag and copy its `releases/Arcade-Guardians.rbf` as
-   `/media/fat/_Arcade/cores/Guardians.rbf`, removing the `Arcade-` prefix
-   as in MiSTer-devel distribution. The MRA uses the stable `Guardians` identifier.
+1. Copy `releases/Arcade-Guardians_20261005.rbf` as
+   `/media/fat/_Arcade/cores/Guardians_20261005.rbf`, removing only the `Arcade-`
+   prefix as in MiSTer-devel distribution. Retain the build-date suffix. The
+   MRA uses the stable `Guardians` identifier, without a date or extension.
 2. Copy that tag's `releases/Guardians (Denjin Makai II).mra` to `/media/fat/_Arcade/`.
 3. Put a legally obtained, unmodified `grdians.zip` in
    `/media/fat/games/mame/`.
 4. Launch **Guardians / Denjin Makai II** from MiSTer's Arcade menu.
+
+The distribution-naming correction is on the default branch after the
+immutable v1.4.1 tag; its RBF bytes and MRA are unchanged. Older tags preserve
+their original filenames. When replacing a manual installation, remove its
+old undated `Guardians.rbf` so only the intended build remains installed.
 
 The MRA identifies every required ROM by filename and CRC. MiSTer will report a
 missing or mismatched file instead of silently loading an incompatible set.
@@ -138,18 +144,24 @@ It matches Quartus's assembler output and an independent compressed CPF
 export byte-for-byte. The ROM layout is unchanged. The production fit uses
 33,070 ALMs, 42,789 registers, 553 M10K blocks and 60 DSP blocks.
 
-To package the committed undated release artifacts:
+To package the committed distribution-ready release artifacts:
 
 ```powershell
-./scripts/package_release.ps1 -Version 1.4.1
+./scripts/package_release.ps1 -Version 1.4.1 -OutputDirectory dist/v1.4.1-distribution
 ```
 
 For a freshly compiled release, add `-BuildDirectory <fitted project folder>`
 to require successful compilation, positive internal timing, the F0 audit,
 compressed-export equality and identical fitted RTL before packaging.
 
-The ROM-free ZIP and checksum manifest are written to `dist/v1.4.1/`. The ZIP
-contains only the matching MRA and `Guardians.rbf` in their MiSTer folders.
+Run `./sim/test_package_release.ps1` to check the installation layout,
+byte-identical ZIP contents, checksums, overwrite protection and rejection of
+invalid release filenames or MRA targets. Its optional `-BuildDirectory`
+also checks rejection of a filename that disagrees with the fitted build date.
+
+The ROM-free ZIP and checksum manifest are written to the selected output
+directory (`dist/v1.4.1-distribution/` above). The ZIP contains only the
+matching undated MRA and `Guardians_20261005.rbf` in their MiSTer folders.
 This locally generated installation ZIP can be extracted to the SD-card root.
 GitHub's automatic source-code ZIP for a tag contains the whole repository;
 it is not an installation ZIP.
@@ -259,11 +271,17 @@ MiSTer-devel versions. Do not create GitHub Release entries or upload release
 assets; the tagged repository's `releases/` folder supplies the RBF and MRA.
 
 The repository follows the MiSTer arcade-core layout: the repository and
-Quartus project use the `Arcade-Guardians` name, while `releases/` contains the
-exactly one undated `Arcade-Guardians.rbf` and its matching
-`Guardians (Denjin Makai II).mra`. Distribution removes the `Arcade-` filename
-prefix, so the MRA uses the stable `Guardians` identifier to find the core.
-The ZIP already uses the correct installed filename, `Guardians.rbf`.
-Older dated builds remain recoverable from Git history, not in `releases/`.
+Quartus project use the `Arcade-Guardians` name, while `releases/` contains
+exactly one dated `Arcade-Guardians_20261005.rbf` and its matching undated
+`Guardians (Denjin Makai II).mra`. The date is the original October 5 production
+build date, not the date of the packaging correction. The official
+[distribution generator](https://github.com/MiSTer-devel/Distribution_MiSTer/blob/main/.github/download_distribution.py)
+discovers binaries by their `_YYYYMMDD` suffix and removes only the `Arcade-`
+filename prefix during arcade installation. The MRA therefore uses the stable
+`Guardians` identifier; the ZIP installs `Guardians_20261005.rbf`.
+The packaging script rejects undated, duplicate or invalid-date release RBFs
+and checks the fitted date when `-BuildDirectory` is supplied. Older builds
+remain recoverable from Git history, not in `releases/`; existing tags are not
+rewritten by a packaging-only correction.
 Build databases, game ROMs, local packages, and diagnostic artifacts are
 deliberately excluded from version control.
